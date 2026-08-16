@@ -1,0 +1,430 @@
+/* Context-show meter: header utility trigger (ring + percent pill) and the
+   draggable panel below it. Tints reuse the shipped ContextMeter palette. */
+
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.trigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.ringTrack {
+  fill: none;
+  stroke: var(--dsw-alias-border-l3);
+  stroke-width: 2px;
+}
+
+.ringLow {
+  fill: none;
+  stroke: var(--dsw-alias-label-tertiary);
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.ringMid {
+  fill: none;
+  stroke: #f59e0b;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.ringHigh {
+  fill: none;
+  stroke: #ef4444;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.triggerText {
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  z-index: 100;
+  box-sizing: border-box;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-height: min(75vh, 520px);
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 12px;
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: default;
+}
+
+/* Dragged state switches to inline position: fixed; nothing else changes. */
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dragHandle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.dragHandle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.dragHandle:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.headline {
+  flex: 1;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.iconButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.iconButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.keyFigures {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.figures {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+
+.costInline {
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+
+.bar {
+  display: flex;
+  gap: 1px;
+  height: 4px;
+  margin: 10px 0 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.segment {
+  flex: none;
+  min-width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--meter-tint, var(--dsw-alias-label-tertiary));
+}
+
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: baseline;
+  background: var(--meter-tint);
+}
+
+.colorSystem {
+  --meter-tint: var(--dsw-static-neutral-bluish-400);
+}
+
+.colorTools {
+  --meter-tint: #a78bfa;
+}
+
+.colorMessages {
+  --meter-tint: var(--dsw-static-blue-450);
+}
+
+.rows {
+  margin: 6px 0 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.row dt {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.row dd {
+  flex: none;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sectionHint {
+  font-weight: 400;
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
+}
+
+.compactTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin-top: 6px;
+}
+
+.compactToolsLabel {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.compactTool {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.compactSep {
+  margin-right: 6px;
+  color: var(--dsw-alias-separator-primary);
+}
+
+.compactToolName {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+}
+
+.compactToolMeta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
+}
+
+.toolHeader .toolName {
+  flex: 1;
+}
+
+.toolHeader .toolCalls,
+.toolHeader .toolTokens {
+  min-width: 56px;
+}
+
+.toolList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.toolName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.toolCalls {
+  flex: none;
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.toolTokens {
+  flex: none;
+  min-width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.providerList {
+  margin: 6px 0 0;
+}
+
+.providerCard {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.providerCard:last-child {
+  border-bottom: none;
+}
+
+.providerLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.providerName {
+  flex: none;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.providerModel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.providerCost {
+  flex: none;
+  margin-left: auto;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+
+.providerTokensLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.providerTokens {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.priceLink {
+  flex: none;
+  color: var(--dsw-alias-state-business-primary, var(--dsw-alias-label-secondary));
+  text-decoration: none;
+}
+
+.priceLink:hover {
+  text-decoration: underline;
+}
+
+.priceNote {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
+}
+
+.empty {
+  margin: 8px 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+}

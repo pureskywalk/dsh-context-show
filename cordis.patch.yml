@@ -1,0 +1,65 @@
+# dsh-context-show bundle patch: mounts the context meter into a dsh profile.
+#
+# The host half registers the `contextUsage` session projection (per-provider
+# usage attribution over the durable log, priced in the configured currency
+# with optional peak / off-peak tiering); the web client half renders the
+# draggable occupancy panel (compact / detailed) in the session header and a
+# pricing settings page in the web Settings panel.
+#
+# Prices are per 1M tokens in `currency` (default CNY — DeepSeek bills in
+# RMB). The base fields are the OFF-PEAK rate; `peak` overrides individual
+# fields for samples inside `peakHours` (evaluated in `timeZone`, default
+# Beijing time); empty `peakHours` means flat pricing. Resolution order per
+# route: modelPrices[provider/model] -> prices[provider] -> defaultPrice.
+#
+# CURRENT (pre-2026-08-17) DeepSeek flat rates, per
+# https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ :
+#   deepseek-v4-flash: cache hit 0.02 / cache miss 1.0 / output 2.0  (CNY per 1M)
+#   deepseek-v4-pro:   cache hit 0.025 / cache miss 3.0 / output 6.0
+# The peak/off-peak scheme announced for 2026-08-17 (peak 9-12/14-18 Beijing,
+# off-peak = half of peak; flash peak 3.0/0.10/9.0, pro peak 9.0/0.30/27.0)
+# is OPT-IN: flip `peakHours` to the windows and fill `peak` overrides in the
+# web Settings page (or this file) when it takes effect.
+#
+# priceUrls is display metadata only: the official pricing page link shown
+# next to each provider (no pricing API exists for DeepSeek; OpenRouter is
+# the notable exception). Update the numbers here or in Settings when the
+# provider changes its rates.
+#
+# Install: `dsh plugin --profile <name> add <this package>` (npm or a local
+# path). The `dsh plugin` command pnpm-installs the package into the profile
+# and reconciles it into the profile's `dsh.profile.bundles` layer list.
+- insert:
+    - id: context-show
+      name: dsh-context-show
+      config:
+        # Currency code of the prices below (ISO 4217 style).
+        currency: CNY
+        # Peak-hour windows, 24h [start, end) in timeZone. Empty = flat
+        # pricing (current state; enable after 2026-08-17 or in Settings).
+        peakHours: []
+        timeZone: Asia/Shanghai
+        # Provider-keyed prices; base = off-peak, peak = peak-hour overrides.
+        prices:
+          deepseek-official:
+            inputPerM: 1
+            cacheReadPerM: 0.02
+            cacheWritePerM: 1
+            outputPerM: 2
+        # Model-level overrides, keyed `provider/model` (deepseek-v4-pro tier).
+        modelPrices:
+          deepseek-official/deepseek-v4-pro:
+            inputPerM: 3
+            cacheReadPerM: 0.025
+            cacheWritePerM: 3
+            outputPerM: 6
+        # Fallback for any provider/model without a matching entry above.
+        defaultPrice:
+          inputPerM: 1
+          cacheReadPerM: 0.02
+          cacheWritePerM: 1
+          outputPerM: 2
+        # Official pricing pages shown as links in the cost section.
+        priceUrls:
+          deepseek-official: https://api-docs.deepseek.com/zh-cn/quick_start/pricing/
+        defaultPriceUrl: https://api-docs.deepseek.com/zh-cn/quick_start/pricing/

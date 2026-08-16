@@ -1,0 +1,133 @@
+/** `context-show` namespace dictionaries. */
+/** Dictionary namespace owned by this plugin. */
+export declare const NS = "context-show";
+/** Simplified Chinese dictionary (the key-set source of truth). */
+export declare const zh: {
+    'context.toggle': string;
+    'context.occupancy': string;
+    'context.occupancySummary': string;
+    'context.usageTotal': string;
+    'context.composition': string;
+    'context.system': string;
+    'context.tools': string;
+    'context.messages': string;
+    'context.toolUsage': string;
+    'context.toolHeader': string;
+    'context.callsHeader': string;
+    'context.tokensHeader': string;
+    'context.tokensHint': string;
+    'context.toolCalls': string;
+    'context.cost': string;
+    'context.costEstimated': string;
+    'context.peakHours': string;
+    'context.priceNote': string;
+    'context.officialPrice': string;
+    'context.tokens': string;
+    'context.usageInput': string;
+    'context.usageOutput': string;
+    'context.cacheHit': string;
+    'context.providers': string;
+    'context.providerUsage': string;
+    'context.unattributed': string;
+    'context.noUsage': string;
+    'context.detailMode': string;
+    'context.compactMode': string;
+    'context.close': string;
+    'context.drag': string;
+    'settings.cardTitle': string;
+    'settings.cardDesc': string;
+    'settings.loading': string;
+    'settings.unavailable': string;
+    'settings.currency': string;
+    'settings.peakEnabled': string;
+    'settings.peakHint': string;
+    'settings.timeZone': string;
+    'settings.peakRange1': string;
+    'settings.peakRange2': string;
+    'settings.defaultPrice': string;
+    'settings.providerPrices': string;
+    'settings.modelPrices': string;
+    'settings.priceField': string;
+    'settings.priceOffPeak': string;
+    'settings.pricePeak': string;
+    'settings.priceInput': string;
+    'settings.priceCacheRead': string;
+    'settings.priceCacheWrite': string;
+    'settings.priceOutput': string;
+    'settings.addProvider': string;
+    'settings.addModel': string;
+    'settings.removeProvider': string;
+    'settings.removeModel': string;
+    'settings.note': string;
+    'settings.save': string;
+    'settings.reset': string;
+};
+/** The context-show namespace key union. */
+export type ContextShowKey = keyof typeof zh;
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+    interface LocaleNamespaceMap {
+        /** The context-show panel copy. */
+        'context-show': ContextShowKey;
+    }
+}
+/** English dictionary, checked complete against the zh key set. */
+export declare const en: {
+    'context.toggle': string;
+    'context.occupancy': string;
+    'context.occupancySummary': string;
+    'context.usageTotal': string;
+    'context.composition': string;
+    'context.system': string;
+    'context.tools': string;
+    'context.messages': string;
+    'context.toolUsage': string;
+    'context.toolHeader': string;
+    'context.callsHeader': string;
+    'context.tokensHeader': string;
+    'context.tokensHint': string;
+    'context.toolCalls': string;
+    'context.cost': string;
+    'context.costEstimated': string;
+    'context.peakHours': string;
+    'context.priceNote': string;
+    'context.officialPrice': string;
+    'context.tokens': string;
+    'context.usageInput': string;
+    'context.usageOutput': string;
+    'context.cacheHit': string;
+    'context.providers': string;
+    'context.providerUsage': string;
+    'context.unattributed': string;
+    'context.noUsage': string;
+    'context.detailMode': string;
+    'context.compactMode': string;
+    'context.close': string;
+    'context.drag': string;
+    'settings.cardTitle': string;
+    'settings.cardDesc': string;
+    'settings.loading': string;
+    'settings.unavailable': string;
+    'settings.currency': string;
+    'settings.peakEnabled': string;
+    'settings.peakHint': string;
+    'settings.timeZone': string;
+    'settings.peakRange1': string;
+    'settings.peakRange2': string;
+    'settings.defaultPrice': string;
+    'settings.providerPrices': string;
+    'settings.modelPrices': string;
+    'settings.priceField': string;
+    'settings.priceOffPeak': string;
+    'settings.pricePeak': string;
+    'settings.priceInput': string;
+    'settings.priceCacheRead': string;
+    'settings.priceCacheWrite': string;
+    'settings.priceOutput': string;
+    'settings.addProvider': string;
+    'settings.addModel': string;
+    'settings.removeProvider': string;
+    'settings.removeModel': string;
+    'settings.note': string;
+    'settings.save': string;
+    'settings.reset': string;
+};

@@ -1,0 +1,321 @@
+/* Context-show settings page: pricing table editor. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-3);
+  transition: border-color .16s, background .16s;
+}
+
+.root:hover {
+  border-color: var(--dsw-alias-label-dimmed);
+}
+
+.rootOpen {
+  background: var(--dsw-alias-bg-layer-2);
+  border-color: var(--dsw-alias-label-dimmed);
+}
+
+.header {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.header:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+.headText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform .16s;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  margin: 0 16px;
+  padding: 12px 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cardDesc {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fieldRowWide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.fieldLabel {
+  flex: none;
+  min-width: 120px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.fieldHint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.textInput,
+.selectInput {
+  box-sizing: border-box;
+  min-width: 180px;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.textInput:focus,
+.selectInput:focus,
+.numberInput:focus,
+.numberInputSmall:focus {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 0;
+}
+
+.checkboxInput {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.rangeRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rangeLabel {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  min-width: 84px;
+}
+
+.rangeSep {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.numberInputSmall {
+  width: 64px;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sectionTitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.priceTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.priceTable th {
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.priceTable td {
+  padding: 4px 8px;
+}
+
+.priceFieldHead {
+  width: 45%;
+}
+
+.priceValueHead {
+  width: 27.5%;
+}
+
+.priceFieldCell {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.priceValueCell {
+  text-align: left;
+}
+
+.numberInput {
+  width: 110px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.entryCard {
+  padding: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.entryHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.entryHeader .textInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.removeButton {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.removeButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.addButton {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.addButton:hover {
+  border-color: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.note {
+  margin: 2px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: none;
+  background: var(--dsw-alias-state-business-primary);
+  color: #fff;
+}
+
+.primaryButton:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.secondaryButton {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.empty {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+}
