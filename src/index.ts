@@ -18,12 +18,14 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import z from '@deepseek-ai/schemastery'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { makeBridgeRoutes } from './bridge.ts'
 import {
   createContextUsageProjectionDefinition,
   createPricingSpec,
+  DEFAULT_PEAK_HOURS,
   DEFAULT_PRICE,
   type PeakHourRange,
   type TokenPrice,
@@ -50,6 +52,9 @@ export type { ContextUsageProjection, ProviderUsageProjection } from './projecti
  */
 export const CONTEXT_SHOW_SETTINGS_NAMESPACE = settingsNamespace('context-show')
 
+/** Required host service: the projection registry the contextUsage unit folds into. */
+export const inject = ['sessionProjections']
+
 /** Prices per 1M tokens of one route; base = off-peak, optional `peak` overrides. */
 export interface PriceEntry extends TokenPrice {}
 
@@ -61,8 +66,9 @@ export interface PriceEntry extends TokenPrice {}
  * `defaultPrice`. Peak / off-peak tiering is driven by `peakHours`
  * (evaluated in `timeZone`, default Beijing time) — samples inside a peak
  * window are priced at each entry's `peak` rate, everything else at the
- * base rate. Defaults are DeepSeek's current FLAT rates (pre-2026-08-17);
- * enable `peakHours` to switch to the announced peak/off-peak scheme.
+ * base rate. Defaults are DeepSeek's peak / off-peak rates (effective
+ * 2026-08-17): base = off-peak, `peak` = peak-hour rate, and `peakHours`
+ * defaults to the announced Beijing windows (9:00-12:00, 14:00-18:00).
  */
 export interface Config {
   /** ISO 4217-style currency code of the prices (default CNY — DeepSeek bills in RMB). */
@@ -123,7 +129,7 @@ export const Config: z<Config> = z.object({
   // Schemastery object fields are optional by default (no .optional()); an
   // absent field stays absent unless a default supplies a fallback.
   defaultPriceUrl: z.string(),
-  peakHours: z.array(peakHourSchema).default([]),
+  peakHours: z.array(peakHourSchema).default([...DEFAULT_PEAK_HOURS]),
   timeZone: z.string().default('Asia/Shanghai'),
 }) as unknown as z<Config>
 
@@ -146,9 +152,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       disposeProjection = undefined
     }
     const spec = createPricingSpec(current())
-    ctx.inject(['sessionProjections'], (projectionCtx) => {
-      disposeProjection = projectionCtx.sessionProjections.register(createContextUsageProjectionDefinition(spec))
-    })
+    disposeProjection = ctx.sessionProjections.register(createContextUsageProjectionDefinition(spec))
   }
 
   installSettingsSection(ctx, CONTEXT_SHOW_SETTINGS_NAMESPACE, Config, config ?? {}, {

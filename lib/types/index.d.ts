@@ -27,6 +27,8 @@ export type { ContextUsageProjection, ProviderUsageProjection } from './projecti
  * so the client can bind the same value without depending on a Host package.
  */
 export declare const CONTEXT_SHOW_SETTINGS_NAMESPACE: import("@deepseek-ai/dsh-settings").SettingsNamespace;
+/** Required host service: the projection registry the contextUsage unit folds into. */
+export declare const inject: string[];
 /** Prices per 1M tokens of one route; base = off-peak, optional `peak` overrides. */
 export interface PriceEntry extends TokenPrice {
 }
@@ -38,8 +40,9 @@ export interface PriceEntry extends TokenPrice {
  * `defaultPrice`. Peak / off-peak tiering is driven by `peakHours`
  * (evaluated in `timeZone`, default Beijing time) — samples inside a peak
  * window are priced at each entry's `peak` rate, everything else at the
- * base rate. Defaults are DeepSeek's current FLAT rates (pre-2026-08-17);
- * enable `peakHours` to switch to the announced peak/off-peak scheme.
+ * base rate. Defaults are DeepSeek's peak / off-peak rates (effective
+ * 2026-08-17): base = off-peak, `peak` = peak-hour rate, and `peakHours`
+ * defaults to the announced Beijing windows (9:00-12:00, 14:00-18:00).
  */
 export interface Config {
     /** ISO 4217-style currency code of the prices (default CNY — DeepSeek bills in RMB). */

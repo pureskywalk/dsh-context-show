@@ -25,19 +25,21 @@
 也可以直接编辑 patch 配置（从上到下优先级递增，后一层整段覆盖前一层的同一行 config）：
 
 1. **插件默认值**：`dsh-context-show/cordis.patch.yml`（随插件分发）。
-2. **profile 用户层**：`$DSH_HOME/profiles/web/cordis.patch.yml`（已预置一份当前平价配置）。
+2. **profile 用户层**：`$DSH_HOME/profiles/web/cordis.patch.yml`（已预置一份当前峰谷价格配置）。
 3. `$DSH_HOME/cordis.patch.yml` 与命令行 `--patch`。
 
-## 当前默认价格（2026-08-17 之前）
+## 当前默认价格（2026-08-17 起生效）
 
-依据 https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ ，DeepSeek 当前按**平价**计费（人民币 / 每百万 token）：
+依据 https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ ，DeepSeek 已改为**峰谷计价**（人民币 / 每百万 token）：高峰时段为北京时间 9:00–12:00、14:00–18:00，闲时 = 高峰价的一半。
 
-| 模型 | 缓存命中 | 缓存未命中 | 输出 |
-| --- | --- | --- | --- |
-| deepseek-v4-flash | ¥0.02 | ¥1.0 | ¥2.0 |
-| deepseek-v4-pro | ¥0.025 | ¥3.0 | ¥6.0 |
+| 模型 | 时段 | 缓存命中 | 缓存未命中 | 输出 |
+| --- | --- | --- | --- | --- |
+| deepseek-v4-flash | 闲时 | ¥0.05 | ¥1.5 | ¥4.5 |
+| deepseek-v4-flash | 高峰 | ¥0.10 | ¥3.0 | ¥9.0 |
+| deepseek-v4-pro | 闲时 | ¥0.15 | ¥4.5 | ¥13.5 |
+| deepseek-v4-pro | 高峰 | ¥0.30 | ¥9.0 | ¥27.0 |
 
-**2026-08-17 起官方改为峰谷计价**：高峰时段为北京时间 9:00–12:00、14:00–18:00，闲时为高峰价的一半（flash 高峰 ¥3.0/¥0.10/¥9.0，pro 高峰 ¥9.0/¥0.30/¥27.0）。到时在设置页打开「启用峰谷计价」即可（代码已支持按请求时间自动分档，跨档位替换不重复计费）；价格后续调整同样在设置页改数字即可。
+本插件默认已启用峰谷计价（`peakHours: 9–12 / 14–18`，`timeZone: Asia/Shanghai`），并预置上述闲时/高峰两套价格（`base` = 闲时，`peak` = 高峰）。价格后续调整直接在设置页改数字即可；若想改回平价，在设置页关闭「启用峰谷计价」或把 `peakHours` 清空。
 
 ## 面板交互
 
@@ -78,7 +80,7 @@ pnpm verify      # typecheck + test + build
 
 ## 架构
 
-- `src/index.ts` —— host 插件入口：Config（币种 + 分时时段 + 价格表 + 官方价格链接，schemastery schema）+ `installSettingsSection` 注册 `context-show` 设置命名空间（设置页读写 + 改后热重注册投影）+ `ctx.inject(['sessionProjections'], …)` 注册带定价 spec 的 `contextUsage` 投影单元（可选服务，headless 组合不受影响）+ 挂载 loopback 设置桥路由。
+- `src/index.ts` —— host 插件入口：`inject = ['sessionProjections']`（必需服务）+ Config（币种 + 分时时段 + 价格表 + 官方价格链接，schemastery schema）+ `installSettingsSection` 注册 `context-show` 设置命名空间（设置页读写 + 改后热重注册投影）+ 直接 `ctx.sessionProjections.register(...)` 注册带定价 spec 的 `contextUsage` 投影单元（改价时 dispose 旧单元再注册新 spec，重新折叠计价）+ 挂载 loopback 设置桥路由。
 - `src/usage-fold.ts` —— 纯函数折叠：`request/header` 与 `request/context` 记录当前路由，`assistant/chunk` usage 与 `assistant/message` usage 按事件时间归入高峰 / 闲时桶并归因到当时路由；状态为纯 JSON（投影缓存前提），按 `provider\0model` 建表 + 首次使用顺序，每 provider 一个 last-sample 槽做同一步替换（跨档位替换不重复计费）；金额、币种、时段与官方价格链接在 `view()` 阶段从累计桶计算，不进入折叠状态。
 - `src/projection.ts` —— 共享类型 + `SessionProjectionMap` 表 merge（host 注册、client `useProjection('contextUsage')` 共用同一类型表）。
 - `src/bridge.ts` —— host 侧的 loopback 设置桥：`/api/dsh-context-show/settings/describe|mutate`（仅回环、仅 POST），直连 settings seam，镜像官方错误码。
@@ -89,7 +91,7 @@ pnpm verify      # typecheck + test + build
 - `src/client/ContextShowSettings.tsx` —— 插件配置卡片：**默认收起的可折叠外壳**（对齐官方 PluginCard 样式），展开后编辑币种、峰谷开关与时段、默认价 / 供应商价 / 模型级覆盖（闲时+高峰双列表格）、保存 / 恢复默认。
 - `src/client/estimate.ts` —— 客户端快照估价（与 token-meter 固定密度启发式同口径）+ 按工具名聚合。
 - `src/client/formats.ts` —— token 紧凑格式 + 币种感知金额格式（CNY/USD/EUR/…）。
-- `cordis.patch.yml` —— bundle 层：`context-show` 行插入配置树，含当前平价默认价格表与官方价格链接。
+- `cordis.patch.yml` —— bundle 层：`context-show` 行插入配置树，含当前峰谷默认价格表与官方价格链接。
 
 ## 验证
 

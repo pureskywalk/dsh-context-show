@@ -2,24 +2,23 @@
 #
 # The host half registers the `contextUsage` session projection (per-provider
 # usage attribution over the durable log, priced in the configured currency
-# with optional peak / off-peak tiering); the web client half renders the
-# draggable occupancy panel (compact / detailed) in the session header and a
-# pricing settings page in the web Settings panel.
+# with peak / off-peak tiering); the web client half renders the draggable
+# occupancy panel (compact / detailed) in the session header and a pricing
+# settings card in the web Settings panel.
 #
 # Prices are per 1M tokens in `currency` (default CNY — DeepSeek bills in
 # RMB). The base fields are the OFF-PEAK rate; `peak` overrides individual
-# fields for samples inside `peakHours` (evaluated in `timeZone`, default
-# Beijing time); empty `peakHours` means flat pricing. Resolution order per
-# route: modelPrices[provider/model] -> prices[provider] -> defaultPrice.
+# fields for samples inside `peakHours` (evaluated in `timeZone`, Beijing
+# time). Resolution order per route:
+#   modelPrices[provider/model] -> prices[provider] -> defaultPrice.
 #
-# CURRENT (pre-2026-08-17) DeepSeek flat rates, per
+# CURRENT (effective 2026-08-17) DeepSeek peak / off-peak rates, per
 # https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ :
-#   deepseek-v4-flash: cache hit 0.02 / cache miss 1.0 / output 2.0  (CNY per 1M)
-#   deepseek-v4-pro:   cache hit 0.025 / cache miss 3.0 / output 6.0
-# The peak/off-peak scheme announced for 2026-08-17 (peak 9-12/14-18 Beijing,
-# off-peak = half of peak; flash peak 3.0/0.10/9.0, pro peak 9.0/0.30/27.0)
-# is OPT-IN: flip `peakHours` to the windows and fill `peak` overrides in the
-# web Settings page (or this file) when it takes effect.
+#   Off-peak = half of peak. Peak hours (Beijing): 9:00-12:00, 14:00-18:00.
+#   deepseek-v4-flash: cache hit 0.05 / cache miss 1.5 / output 4.5 (off-peak)
+#                      cache hit 0.10 / cache miss 3.0 / output 9.0 (peak)
+#   deepseek-v4-pro:   cache hit 0.15 / cache miss 4.5 / output 13.5 (off-peak)
+#                      cache hit 0.30 / cache miss 9.0 / output 27.0 (peak)
 #
 # priceUrls is display metadata only: the official pricing page link shown
 # next to each provider (no pricing API exists for DeepSeek; OpenRouter is
@@ -35,30 +34,46 @@
       config:
         # Currency code of the prices below (ISO 4217 style).
         currency: CNY
-        # Peak-hour windows, 24h [start, end) in timeZone. Empty = flat
-        # pricing (current state; enable after 2026-08-17 or in Settings).
-        peakHours: []
+        # Peak-hour windows, 24h [start, end) in timeZone (Beijing time).
+        peakHours:
+          - { start: 9, end: 12 }
+          - { start: 14, end: 18 }
         timeZone: Asia/Shanghai
         # Provider-keyed prices; base = off-peak, peak = peak-hour overrides.
         prices:
           deepseek-official:
-            inputPerM: 1
-            cacheReadPerM: 0.02
-            cacheWritePerM: 1
-            outputPerM: 2
+            inputPerM: 1.5
+            cacheReadPerM: 0.05
+            cacheWritePerM: 1.5
+            outputPerM: 4.5
+            peak:
+              inputPerM: 3
+              cacheReadPerM: 0.1
+              cacheWritePerM: 3
+              outputPerM: 9
         # Model-level overrides, keyed `provider/model` (deepseek-v4-pro tier).
         modelPrices:
           deepseek-official/deepseek-v4-pro:
-            inputPerM: 3
-            cacheReadPerM: 0.025
-            cacheWritePerM: 3
-            outputPerM: 6
+            inputPerM: 4.5
+            cacheReadPerM: 0.15
+            cacheWritePerM: 4.5
+            outputPerM: 13.5
+            peak:
+              inputPerM: 9
+              cacheReadPerM: 0.3
+              cacheWritePerM: 9
+              outputPerM: 27
         # Fallback for any provider/model without a matching entry above.
         defaultPrice:
-          inputPerM: 1
-          cacheReadPerM: 0.02
-          cacheWritePerM: 1
-          outputPerM: 2
+          inputPerM: 1.5
+          cacheReadPerM: 0.05
+          cacheWritePerM: 1.5
+          outputPerM: 4.5
+          peak:
+            inputPerM: 3
+            cacheReadPerM: 0.1
+            cacheWritePerM: 3
+            outputPerM: 9
         # Official pricing pages shown as links in the cost section.
         priceUrls:
           deepseek-official: https://api-docs.deepseek.com/zh-cn/quick_start/pricing/

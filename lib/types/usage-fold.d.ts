@@ -85,10 +85,9 @@ export interface PricingSpec {
     isPeakHour(timeMs: number): boolean;
 }
 /**
- * Default DeepSeek official pricing (deepseek-v4-flash tier, CNY, FLAT —
- * the current pre-2026-08-17 rate: cache hit 0.02, cache miss 1.0, output
- * 2.0 per 1M tokens). The peak/off-peak scheme announced for 2026-08-17 is
- * opt-in via `peakHours` (see `DEFAULT_PEAK_HOURS` and the settings page).
+ * Default DeepSeek official pricing (deepseek-v4-flash tier, CNY — the
+ * peak / off-peak scheme effective 2026-08-17; off-peak = half of peak).
+ * Base fields are the OFF-PEAK rate; `peak` overrides the peak-hour rate.
  */
 export declare const DEFAULT_PRICE: TokenPrice;
 /** DeepSeek official route defaults for the shipped composition. */
