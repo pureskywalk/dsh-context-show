@@ -116,8 +116,7 @@ export function apply(ctx: ClientContext): void {
     const settingsInjected = (): ContextShowSettingsInjected => ({ scope, save, reset })
     return ctx.slots.register({
       name: 'settings.plugin.item',
-      id: 'context-show',
-      order: 1000,
+      key: SETTINGS_NAMESPACE,
       locale: NS,
       inject: settingsInjected,
     }, ContextShowSettings)
