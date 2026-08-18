@@ -47,6 +47,7 @@ export declare const zh: {
     'settings.defaultPrice': string;
     'settings.providerPrices': string;
     'settings.modelPrices': string;
+    'settings.autoModelsHint': string;
     'settings.priceField': string;
     'settings.priceOffPeak': string;
     'settings.pricePeak': string;
@@ -116,6 +117,7 @@ export declare const en: {
     'settings.defaultPrice': string;
     'settings.providerPrices': string;
     'settings.modelPrices': string;
+    'settings.autoModelsHint': string;
     'settings.priceField': string;
     'settings.priceOffPeak': string;
     'settings.pricePeak': string;

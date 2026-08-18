@@ -8,12 +8,13 @@
  * @module dsh-context-show/ContextShowSettings
  */
 
-import { memo, useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the ui-settings-plugins SlotMap merge (settings.plugin.item
 // seat, declared at runtime by the configurable tab).
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import { CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX, type BridgeModelsResult } from '../bridge-protocol.ts'
 import type { ContextShowKey } from './locales.ts'
 import styles from './ContextShowSettings.module.css'
 
@@ -69,6 +70,34 @@ const DEFAULT_PEAK_RANGES: readonly PeakRangeView[] = [
 ]
 
 const EMPTY_PRICE = (): PriceView => ({ inputPerM: 0, cacheReadPerM: 0, cacheWritePerM: 0, outputPerM: 0 })
+
+/** One detected provider/model route from the models bridge. */
+interface ModelRoute {
+  provider: string
+  model: string
+}
+
+/** Deep-copy one price entry so auto-added rows never alias their source. */
+const clonePrice = (price: PriceView): PriceView => ({
+  inputPerM: price.inputPerM,
+  cacheReadPerM: price.cacheReadPerM,
+  cacheWritePerM: price.cacheWritePerM,
+  outputPerM: price.outputPerM,
+  ...(price.peak === undefined ? {} : { peak: { ...price.peak } }),
+})
+
+/** Add a model-level price for every detected route that has none yet. */
+const mergeDetectedModels = (base: ConfigView, routes: ReadonlyArray<ModelRoute>): ConfigView => {
+  if (routes.length === 0) return base
+  const modelPrices = { ...base.modelPrices }
+  for (const { provider, model } of routes) {
+    const key = provider + '/' + model
+    if (key in modelPrices) continue
+    const source = base.prices[provider] ?? base.defaultPrice
+    modelPrices[key] = clonePrice(source)
+  }
+  return { ...base, modelPrices }
+}
 
 /** The four base price fields, in display order. */
 const PRICE_FIELDS: ReadonlyArray<{ key: PriceFieldKey; label: ContextShowKey }> = [
@@ -161,10 +190,43 @@ export const ContextShowSettings = memo(function ContextShowSettings(props: Cont
   const [draft, setDraft] = useState<ConfigView | null>(null)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
+  const [models, setModels] = useState<ReadonlyArray<ModelRoute> | null>(null)
+  const modelsRef = useRef<ReadonlyArray<ModelRoute>>([])
+
+  // Detect the provider/model catalog once through the loopback bridge so the
+  // model price table auto-completes every currently available route.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch(CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX + '/models', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        })
+        if (!response.ok) return
+        const data = await response.json() as BridgeModelsResult
+        if (cancelled || !data.ok) return
+        setModels(data.value.groups.flatMap(group => group.models.map(model => ({ provider: group.provider, model }))))
+      } catch {
+        // Models bridge unavailable: keep the manual provider/model editors.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
-    if (value !== undefined) setDraft(value)
+    if (models !== null) modelsRef.current = models
+  }, [models])
+
+  useEffect(() => {
+    if (value !== undefined) setDraft(mergeDetectedModels(value, modelsRef.current))
   }, [value])
+
+  useEffect(() => {
+    if (models === null) return
+    setDraft((prev) => prev === null ? prev : mergeDetectedModels(prev, models))
+  }, [models])
 
   /** Collapsible card chrome: a toggle header over the body (collapsed by default). */
   const shell = (body: ReactNode): ReactNode => (
@@ -232,9 +294,12 @@ export const ContextShowSettings = memo(function ContextShowSettings(props: Cont
       if (prev === null || oldKey === nextKey || nextKey === '') return prev
       const recordValue = prev[record]
       if (nextKey in recordValue) return prev
-      const nextRecord = { ...recordValue }
-      nextRecord[nextKey] = recordValue[oldKey] ?? EMPTY_PRICE()
-      delete nextRecord[oldKey]
+      // Rebuild in insertion order, renaming in place: the entry's React key
+      // (its index) stays stable while typing, so the input keeps focus.
+      const nextRecord: Record<string, PriceView> = {}
+      for (const [current, price] of Object.entries(recordValue)) {
+        nextRecord[current === oldKey ? nextKey : current] = price
+      }
       return { ...prev, [record]: nextRecord }
     })
   }
@@ -365,13 +430,13 @@ export const ContextShowSettings = memo(function ContextShowSettings(props: Cont
       />
 
       <h3 className={styles.sectionTitle}>{t('settings.providerPrices')}</h3>
-      {Object.entries(draft.prices).map(([key, price]) => (
-        <div className={styles.entryCard} key={key}>
+      {Object.entries(draft.prices).map(([key, price], index) => (
+        <div className={styles.entryCard} key={index}>
           <div className={styles.entryHeader}>
             <input
               className={styles.textInput}
-              id="context-show-provider-key"
-              name="context-show-provider-key"
+              id={`context-show-provider-key-${index}`}
+              name={`context-show-provider-key-${index}`}
               value={key}
               onChange={(event) => { renameKey('prices', key, event.target.value.trim()) }}
             />
@@ -390,13 +455,14 @@ export const ContextShowSettings = memo(function ContextShowSettings(props: Cont
       </button>
 
       <h3 className={styles.sectionTitle}>{t('settings.modelPrices')}</h3>
-      {Object.entries(draft.modelPrices).map(([key, price]) => (
-        <div className={styles.entryCard} key={key}>
+      {models !== null && models.length > 0 && <p className={styles.note}>{t('settings.autoModelsHint')}</p>}
+      {Object.entries(draft.modelPrices).map(([key, price], index) => (
+        <div className={styles.entryCard} key={index}>
           <div className={styles.entryHeader}>
             <input
               className={styles.textInput}
-              id="context-show-model-key"
-              name="context-show-model-key"
+              id={`context-show-model-key-${index}`}
+              name={`context-show-model-key-${index}`}
               value={key}
               onChange={(event) => { renameKey('modelPrices', key, event.target.value.trim()) }}
             />

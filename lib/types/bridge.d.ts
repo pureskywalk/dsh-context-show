@@ -14,9 +14,26 @@
  */
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver';
 import type { SettingsProvider } from '@deepseek-ai/dsh-settings';
+/** Minimal llm-catalog face the bridge needs (satisfied by ctx.llm). */
+export interface LlmCatalogFace {
+    listProviders(): readonly {
+        id: string;
+        name: string;
+    }[];
+    listModels(provider: string): Promise<readonly {
+        id: string;
+    }[]>;
+}
+/** Dependencies of the bridge handlers. */
+export interface BridgeDeps {
+    /** The host settings seam (already injected). */
+    settings: SettingsProvider;
+    /** The llm catalog seam for auto-detected provider/model routes. */
+    llm: LlmCatalogFace;
+}
 /**
  * Build the loopback-only bridge routes.
- * @param settings - the host settings seam (already injected).
+ * @param deps - the settings seam and the llm catalog seam.
  * @returns the exact-path route registrations.
  */
-export declare function makeBridgeRoutes(settings: SettingsProvider): WebRoute[];
+export declare function makeBridgeRoutes(deps: BridgeDeps): WebRoute[];

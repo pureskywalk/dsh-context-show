@@ -18,6 +18,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import z from '@deepseek-ai/schemastery'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -165,9 +166,9 @@ export function apply(ctx: Context, config: Config = {}): void {
   // boundary, so the pricing form is re-served through a loopback-only bridge
   // over the host settings seam. On hosts whose apiproxy already exposes the
   // namespace this stays dormant (the client keeps the official scope primary).
-  ctx.inject(['settings', 'webServer'], (bridgeCtx) => {
+  ctx.inject(['settings', 'webServer', 'llm'], (bridgeCtx) => {
     bridgeCtx.effect(() => {
-      const disposers = makeBridgeRoutes(bridgeCtx.settings).map(route => bridgeCtx.webServer.register(route))
+      const disposers = makeBridgeRoutes({ settings: bridgeCtx.settings, llm: bridgeCtx.llm }).map(route => bridgeCtx.webServer.register(route))
       return () => {
         for (const dispose of disposers) dispose()
       }

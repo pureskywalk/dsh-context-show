@@ -65,3 +65,24 @@ export interface BridgeMutateRequest {
 export type BridgeMutateResult =
   | { ok: true; value: BridgeNamespaceView }
   | { ok: false; code: string; message: string }
+
+/** One provider group of the detected model catalog. */
+export interface BridgeModelGroup {
+  /** Provider route key (the same id used in `prices`). */
+  provider: string
+  /** Human-readable provider name. */
+  name: string
+  /** Model ids the provider currently advertises. */
+  models: string[]
+}
+
+/** Payload of a successful models response. */
+export interface BridgeModelsValue {
+  /** Detected provider/model groups, in provider registration order. */
+  groups: BridgeModelGroup[]
+}
+
+/** Models result, shaped like an official RPC result envelope. */
+export type BridgeModelsResult =
+  | { ok: true; value: BridgeModelsValue }
+  | { ok: false; code: string; message: string }

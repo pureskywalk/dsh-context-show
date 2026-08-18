@@ -20,6 +20,7 @@ import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-setti
 import {
   CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX,
   type BridgeDescribeResult,
+  type BridgeModelsResult,
   type BridgeMutateRequest,
   type BridgeMutateResult,
   type BridgeNamespaceView,
@@ -108,12 +109,27 @@ function failureOf(error: unknown): { ok: false; code: string; message: string }
   return { ok: false, code: 'settings-rejected', message }
 }
 
+/** Minimal llm-catalog face the bridge needs (satisfied by ctx.llm). */
+export interface LlmCatalogFace {
+  listProviders(): readonly { id: string; name: string }[]
+  listModels(provider: string): Promise<readonly { id: string }[]>
+}
+
+/** Dependencies of the bridge handlers. */
+export interface BridgeDeps {
+  /** The host settings seam (already injected). */
+  settings: SettingsProvider
+  /** The llm catalog seam for auto-detected provider/model routes. */
+  llm: LlmCatalogFace
+}
+
 /**
  * Build the loopback-only bridge routes.
- * @param settings - the host settings seam (already injected).
+ * @param deps - the settings seam and the llm catalog seam.
  * @returns the exact-path route registrations.
  */
-export function makeBridgeRoutes(settings: SettingsProvider): WebRoute[] {
+export function makeBridgeRoutes(deps: BridgeDeps): WebRoute[] {
+  const { settings, llm } = deps
   const namespace = settingsNamespace(BRIDGE_NAMESPACE) as SettingsNamespace
   const describe = (): BridgeDescribeResult => {
     const descriptor = settings.describe({ redactSecrets: true }).find(candidate => String(candidate.ns) === BRIDGE_NAMESPACE)
@@ -160,6 +176,23 @@ export function makeBridgeRoutes(settings: SettingsProvider): WebRoute[] {
     }
     return true
   }
+  const models = async (): Promise<BridgeModelsResult> => {
+    try {
+      const providers = llm.listProviders()
+      const groups: Array<{ provider: string; name: string; models: string[] }> = []
+      for (const provider of providers) {
+        try {
+          const entries = await llm.listModels(provider.id)
+          groups.push({ provider: provider.id, name: provider.name, models: entries.map(entry => entry.id) })
+        } catch {
+          // A provider whose catalog read fails is skipped, not fatal.
+        }
+      }
+      return { ok: true, value: { groups } }
+    } catch (error) {
+      return { ok: false, code: 'internal', message: error instanceof Error ? error.message : String(error) }
+    }
+  }
   return [
     {
       kind: 'exact',
@@ -180,6 +213,14 @@ export function makeBridgeRoutes(settings: SettingsProvider): WebRoute[] {
           return
         }
         writeJson(res, 200, await mutate(body))
+      },
+    },
+    {
+      kind: 'exact',
+      path: CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX + '/models',
+      handler: async (req, res) => {
+        if (!guard(req, res)) return
+        writeJson(res, 200, await models())
       },
     },
   ]
