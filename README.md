@@ -28,9 +28,9 @@
 2. **profile 用户层**：`$DSH_HOME/profiles/web/cordis.patch.yml`（已预置一份当前峰谷价格配置）。
 3. `$DSH_HOME/cordis.patch.yml` 与命令行 `--patch`。
 
-## 当前默认价格（2026-08-17 起生效）
+## 当前默认价格
 
-依据 https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ ，DeepSeek 已改为**峰谷计价**（人民币 / 每百万 token）：高峰时段为北京时间 9:00–12:00、14:00–18:00，闲时 = 高峰价的一半。
+依据 https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ ，DeepSeek 采用**峰谷计价**（人民币 / 每百万 token）：高峰时段为北京时间**周一至周五** 9:00–12:00、14:00–18:00，周末与其余时段为闲时；闲时 = 高峰价的一半。
 
 | 模型 | 时段 | 缓存命中 | 缓存未命中 | 输出 |
 | --- | --- | --- | --- | --- |
@@ -38,8 +38,9 @@
 | deepseek-v4-flash | 高峰 | ¥0.10 | ¥3.0 | ¥9.0 |
 | deepseek-v4-pro | 闲时 | ¥0.15 | ¥4.5 | ¥13.5 |
 | deepseek-v4-pro | 高峰 | ¥0.30 | ¥9.0 | ¥27.0 |
+| deepseek-v4-flash-vision-exp | 同 flash | ¥0.05/0.10 | ¥1.5/3.0 | ¥4.5/9.0 |
 
-本插件默认已启用峰谷计价（`peakHours: 9–12 / 14–18`，`timeZone: Asia/Shanghai`），并预置上述闲时/高峰两套价格（`base` = 闲时，`peak` = 高峰）。价格后续调整直接在设置页改数字即可；若想改回平价，在设置页关闭「启用峰谷计价」或把 `peakHours` 清空。
+本插件默认已启用峰谷计价（`peakHours: 9–12 / 14–18`，`timeZone: Asia/Shanghai`，且**周末自动按闲时**），并预置上述闲时/高峰两套价格（`base` = 闲时，`peak` = 高峰）。价格后续调整直接在设置页改数字即可；若想改回平价，在设置页关闭「启用峰谷计价」或把 `peakHours` 清空。
 
 ## 面板交互
 

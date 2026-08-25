@@ -105,24 +105,32 @@ function messageUsage(turn: number, step: number, input: number, output: number,
 
 describe('isPeakHour', () => {
   it('matches ranges in the configured timezone, including midnight wrap', () => {
-    // 2026-08-15 10:00 UTC is 10:00 UTC -> inside 9-12
-    const at10Utc = Date.UTC(2026, 7, 15, 10, 0)
+    // 2026-08-18 (Tue) 10:00 UTC is inside 9-12
+    const at10Utc = Date.UTC(2026, 7, 18, 10, 0)
     expect(isPeakHour(at10Utc, [{ start: 9, end: 12 }], 'UTC')).toBe(true)
     // 08:00 UTC outside
-    const at8Utc = Date.UTC(2026, 7, 15, 8, 0)
+    const at8Utc = Date.UTC(2026, 7, 18, 8, 0)
     expect(isPeakHour(at8Utc, [{ start: 9, end: 12 }], 'UTC')).toBe(false)
     // Beijing 09:00 == UTC 01:00 -> inside 9-12 Asia/Shanghai window
-    const beijing9 = Date.UTC(2026, 7, 15, 1, 0)
+    const beijing9 = Date.UTC(2026, 7, 18, 1, 0)
     expect(isPeakHour(beijing9, [{ start: 9, end: 12 }], 'Asia/Shanghai')).toBe(true)
     // Beijing 17:00 == UTC 09:00 -> outside
-    const beijing17 = Date.UTC(2026, 7, 15, 9, 0)
+    const beijing17 = Date.UTC(2026, 7, 18, 9, 0)
     expect(isPeakHour(beijing17, [{ start: 9, end: 12 }], 'Asia/Shanghai')).toBe(false)
-    // wrap: 22:00-02:00 includes 23:00 and 01:00, excludes 03:00
-    expect(isPeakHour(Date.UTC(2026, 7, 15, 23, 0), [{ start: 22, end: 2 }], 'UTC')).toBe(true)
-    expect(isPeakHour(Date.UTC(2026, 7, 16, 1, 0), [{ start: 22, end: 2 }], 'UTC')).toBe(true)
-    expect(isPeakHour(Date.UTC(2026, 7, 16, 3, 0), [{ start: 22, end: 2 }], 'UTC')).toBe(false)
+    // wrap: 22:00-02:00 includes 23:00 (Tue) and 01:00 (Wed), excludes 03:00
+    expect(isPeakHour(Date.UTC(2026, 7, 18, 23, 0), [{ start: 22, end: 2 }], 'UTC')).toBe(true)
+    expect(isPeakHour(Date.UTC(2026, 7, 19, 1, 0), [{ start: 22, end: 2 }], 'UTC')).toBe(true)
+    expect(isPeakHour(Date.UTC(2026, 7, 19, 3, 0), [{ start: 22, end: 2 }], 'UTC')).toBe(false)
     // empty ranges -> never peak
-    expect(isPeakHour(Date.UTC(2026, 7, 15, 10, 0), [], 'UTC')).toBe(false)
+    expect(isPeakHour(Date.UTC(2026, 7, 18, 10, 0), [], 'UTC')).toBe(false)
+  })
+
+  it('treats weekends as off-peak regardless of the hour', () => {
+    // 2026-08-15 is Saturday, 2026-08-16 is Sunday
+    expect(isPeakHour(Date.UTC(2026, 7, 15, 10, 0), [{ start: 9, end: 12 }], 'UTC')).toBe(false)
+    expect(isPeakHour(Date.UTC(2026, 7, 16, 10, 0), [{ start: 9, end: 12 }], 'UTC')).toBe(false)
+    // Monday 10:00 is peak again
+    expect(isPeakHour(Date.UTC(2026, 7, 17, 10, 0), [{ start: 9, end: 12 }], 'UTC')).toBe(true)
   })
 })
 

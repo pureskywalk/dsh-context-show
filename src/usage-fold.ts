@@ -125,7 +125,7 @@ export const DEFAULT_PROVIDER_PRICES: Record<string, TokenPrice> = Object.freeze
   'deepseek-official': DEFAULT_PRICE,
 })
 
-/** DeepSeek peak hours (Beijing time): 9:00-12:00 and 14:00-18:00. */
+/** DeepSeek peak hours (Beijing time, weekdays only): 9:00-12:00 and 14:00-18:00. */
 export const DEFAULT_PEAK_HOURS: readonly PeakHourRange[] = Object.freeze([
   { start: 9, end: 12 },
   { start: 14, end: 18 },
@@ -173,6 +173,12 @@ function hourInTimeZone(timeMs: number, timeZone: string): number {
   return Number(hour)
 }
 
+/** Whether the instant is Saturday or Sunday in the given IANA timezone. */
+function isWeekendInTimeZone(timeMs: number, timeZone: string): boolean {
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(new Date(timeMs))
+  return weekday === 'Sat' || weekday === 'Sun'
+}
+
 /**
  * Whether an instant falls in any peak window (supports ranges that wrap
  * midnight via start > end).
@@ -187,6 +193,8 @@ export function isPeakHour(
   timeZone = DEFAULT_TIME_ZONE,
 ): boolean {
   if (ranges.length === 0) return false
+  // DeepSeek's peak windows apply on weekdays only; weekends are off-peak.
+  if (isWeekendInTimeZone(timeMs, timeZone)) return false
   const hour = hourInTimeZone(timeMs, timeZone)
   for (const range of ranges) {
     if (range.start <= range.end

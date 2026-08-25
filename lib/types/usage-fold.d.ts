@@ -92,7 +92,7 @@ export interface PricingSpec {
 export declare const DEFAULT_PRICE: TokenPrice;
 /** DeepSeek official route defaults for the shipped composition. */
 export declare const DEFAULT_PROVIDER_PRICES: Record<string, TokenPrice>;
-/** DeepSeek peak hours (Beijing time): 9:00-12:00 and 14:00-18:00. */
+/** DeepSeek peak hours (Beijing time, weekdays only): 9:00-12:00 and 14:00-18:00. */
 export declare const DEFAULT_PEAK_HOURS: readonly PeakHourRange[];
 /** Default timezone DeepSeek bills its peak hours in. */
 export declare const DEFAULT_TIME_ZONE = "Asia/Shanghai";
