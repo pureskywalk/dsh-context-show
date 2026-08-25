@@ -56,7 +56,7 @@ function foldAll(events: readonly SessionEvent[], spec: PricingSpec = flatSpec()
     expect(next).not.toBeUndefined()
     state = next as ContextUsageState
   }
-  return definition.view(state)
+  return definition.wire.view(state)
 }
 
 const seq = { value: 0 }
@@ -294,7 +294,7 @@ describe('contextUsage fold', () => {
     let state = definition.init()
     state = definition.apply(state, header('deepseek-official', 'deepseek-v4-flash') as SessionEvent)
     state = definition.apply(state, messageUsage(1, 1, 100, 10) as SessionEvent)
-    const value = definition.view(state as ContextUsageState)
+    const value = definition.wire.view(state as ContextUsageState)
     expect(value.providers[0]?.priceUrl).toBe('https://api-docs.deepseek.com/zh-cn/quick_start/pricing/')
     expect(value.currency).toBe('CNY')
     expect(value.peakHours).toBeUndefined()
@@ -307,7 +307,7 @@ describe('contextUsage fold', () => {
     let state = definition.init()
     state = definition.apply(state, header('deepseek-official', 'deepseek-v4-flash') as SessionEvent)
     state = definition.apply(state, messageUsage(1, 1, 1_000_000, 1_000_000, { cacheRead: 1_000_000, cacheWrite: 1_000_000 }) as SessionEvent)
-    const value = definition.view(state as ContextUsageState)
+    const value = definition.wire.view(state as ContextUsageState)
     // DEFAULT_PRICE off-peak base: miss 1.5, hit 0.05, write 1.5, output 4.5
     expect(value.currency).toBe('CNY')
     expect(value.peakHours).toBeUndefined()

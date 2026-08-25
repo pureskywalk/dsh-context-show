@@ -26,8 +26,10 @@
  *
  * @module dsh-context-show/usage-fold
  */
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection';
+import { z } from 'zod';
+import type { SessionEvent } from '@deepseek-ai/dsh-session';
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client';
+import type { ContextUsageProjection } from './projection.ts';
 /** Base price fields of one route, per 1M tokens in the configured currency. */
 export interface TokenPriceBase {
     /** Per 1M uncached (cache-miss) input tokens. */
@@ -167,6 +169,11 @@ export interface ContextUsageState {
     /** Last unattributed sample, for same-step replacement. */
     unattributedLast: UsageSample | null;
 }
+declare module '@deepseek-ai/dsh-session-projection/types' {
+    interface SessionProjectionStateMap {
+        contextUsage: ContextUsageState;
+    }
+}
 /**
  * Create the replayable `contextUsage` projection definition, priced by the
  * given spec. The spec is captured at registration time; a price or peak
@@ -176,5 +183,21 @@ export interface ContextUsageState {
  * @param spec - pricing spec: currency, route prices, links, peak clock.
  * @returns the replayable `contextUsage` projection definition.
  */
-export declare function createContextUsageProjectionDefinition(spec: PricingSpec): ProjectionDefinition<'contextUsage', ContextUsageState>;
+export declare function createContextUsageProjectionDefinition(spec: PricingSpec): {
+    key: "contextUsage";
+    stateSchema: z.ZodType<ContextUsageState, unknown, z.core.$ZodTypeInternals<ContextUsageState, unknown>>;
+    init: () => {
+        route: undefined;
+        providers: {};
+        order: never[];
+        unattributed: TierBuckets;
+        unattributedLast: null;
+    };
+    apply: (state: NoInfer<ContextUsageState>, event: SessionEvent) => ContextUsageState;
+    wire: {
+        viewSchema: z.ZodType<ContextUsageProjection, unknown, z.core.$ZodTypeInternals<ContextUsageProjection, unknown>>;
+        view: (state: NoInfer<ContextUsageState>) => ContextUsageProjection;
+    };
+    stateVersion: number;
+};
 export {};

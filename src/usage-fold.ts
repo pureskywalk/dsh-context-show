@@ -305,6 +305,12 @@ export interface ContextUsageState {
   unattributedLast: UsageSample | null
 }
 
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    contextUsage: ContextUsageState
+  }
+}
+
 const bucketSchema = z.object({
   uncachedInputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
@@ -328,6 +334,34 @@ const peakHourSchema = z.object({
   start: z.number().int().min(0).max(23),
   end: z.number().int().min(0).max(24),
 }).strict()
+
+const usageSampleSchema = z.object({
+  turn: z.number().int().nonnegative(),
+  step: z.number().int().nonnegative(),
+  buckets: bucketSchema,
+  tier: z.enum(['peak', 'offPeak']),
+}).strict()
+
+const tierBucketsSchema = z.object({
+  peak: bucketSchema,
+  offPeak: bucketSchema,
+}).strict()
+
+const providerStateSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  buckets: tierBucketsSchema,
+  last: usageSampleSchema.nullable(),
+  steps: z.number().int().nonnegative(),
+}).strict()
+
+const contextUsageStateSchema = z.object({
+  route: z.object({ provider: z.string(), model: z.string() }).strict().optional(),
+  providers: z.record(z.string(), providerStateSchema),
+  order: z.array(z.string()),
+  unattributed: tierBucketsSchema,
+  unattributedLast: usageSampleSchema.nullable(),
+}).strict() as unknown as z.ZodType<ContextUsageState>
 
 const contextUsageSchema = z.object({
   currency: z.string(),
@@ -437,12 +471,10 @@ function costOfTiered(buckets: TierBuckets, price: TokenPrice): number {
  * @param spec - pricing spec: currency, route prices, links, peak clock.
  * @returns the replayable `contextUsage` projection definition.
  */
-export function createContextUsageProjectionDefinition(
-  spec: PricingSpec,
-): ProjectionDefinition<'contextUsage', ContextUsageState> {
+export function createContextUsageProjectionDefinition(spec: PricingSpec) {
   return {
     key: 'contextUsage',
-    schema: contextUsageSchema,
+    stateSchema: contextUsageStateSchema,
     init: () => ({
       route: undefined,
       providers: {},
@@ -474,8 +506,10 @@ export function createContextUsageProjectionDefinition(
       }
       return attribute(state, turn, step, usage, spec.isPeakHour(event.time))
     },
-    view: (state): ContextUsageProjection => {
-      let total = zeroBuckets()
+    wire: {
+      viewSchema: contextUsageSchema,
+      view: (state): ContextUsageProjection => {
+        let total = zeroBuckets()
       let totalCost = 0
       const providers: ProviderUsageProjection[] = []
       for (const key of state.order) {
@@ -509,8 +543,9 @@ export function createContextUsageProjectionDefinition(
           peakHours: spec.peakHours,
           timeZone: spec.timeZone,
         }),
-      }
+        }
+      },
     },
     stateVersion: 2,
-  }
+  } satisfies ProjectionDefinition<'contextUsage', ContextUsageState>
 }
