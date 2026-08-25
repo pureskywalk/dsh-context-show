@@ -2,6 +2,8 @@
 
 实时上下文占用面板（DSH Web 客户端插件 + 主机投影插件）。
 
+> **当前对齐 DeepSeek Harness `0.1.1-rc.2`**：`contextUsage` 会话投影按新版 API 注册为 `stateSchema`（折叠态校验）+ `wire`（客户端可见视图），金额面板依赖的 `contextUsage` 快照因此能随会话正常下发。`0.1.0-rc.7` 及更早宿主缺少该 wire 视图，若金额不显示请一并升级宿主到 `0.1.1-rc.2`。
+
 在会话头部右侧添加一个占用指示按钮（圆环 + 百分比），点击展开/收起**可拖动的面板**，实时展示：
 
 - **上下文占用**：`projectedTokens / contextWindow` 占用百分比（供应商上报锚定 + 表面增量，随 compaction 即时收缩），圆环按占用程度变色（<70% 中性、70–89% 琥珀、≥90% 红）。
@@ -82,8 +84,8 @@ pnpm verify      # typecheck + test + build
 ## 架构
 
 - `src/index.ts` —— host 插件入口：`inject = ['sessionProjections']`（必需服务）+ Config（币种 + 分时时段 + 价格表 + 官方价格链接，schemastery schema）+ `installSettingsSection` 注册 `context-show` 设置命名空间（设置页读写 + 改后热重注册投影）+ 直接 `ctx.sessionProjections.register(...)` 注册带定价 spec 的 `contextUsage` 投影单元（改价时 dispose 旧单元再注册新 spec，重新折叠计价）+ 挂载 loopback 设置桥路由。
-- `src/usage-fold.ts` —— 纯函数折叠：`request/header` 与 `request/context` 记录当前路由，`assistant/chunk` usage 与 `assistant/message` usage 按事件时间归入高峰 / 闲时桶并归因到当时路由；状态为纯 JSON（投影缓存前提），按 `provider\0model` 建表 + 首次使用顺序，每 provider 一个 last-sample 槽做同一步替换（跨档位替换不重复计费）；金额、币种、时段与官方价格链接在 `view()` 阶段从累计桶计算，不进入折叠状态。
-- `src/projection.ts` —— 共享类型 + `SessionProjectionMap` 表 merge（host 注册、client `useProjection('contextUsage')` 共用同一类型表）。
+- `src/usage-fold.ts` —— 纯函数折叠：`request/header` 与 `request/context` 记录当前路由，`assistant/chunk` usage 与 `assistant/message` usage 按事件时间归入高峰 / 闲时桶并归因到当时路由；状态为纯 JSON（投影缓存前提，经 `stateSchema` 校验），按 `provider\0model` 建表 + 首次使用顺序，每 provider 一个 last-sample 槽做同一步替换（跨档位替换不重复计费）；金额、币种、时段与官方价格链接在 `wire.view()` 阶段从累计桶计算，不进入折叠状态；同时通过 module augmentation 把 `contextUsage` 折叠态并进 `SessionProjectionStateMap`。
+- `src/projection.ts` —— 共享类型 + `SessionProjectionMap`（客户端 wire 视图）表 merge；`src/usage-fold.ts` 另 augment `SessionProjectionStateMap`（主机折叠态）。host 注册、client `useProjection('contextUsage')` 共用同一 wire 类型表。
 - `src/bridge.ts` —— host 侧的 loopback 设置桥：`/api/dsh-context-show/settings/describe|mutate`（仅回环、仅 POST），直连 settings seam，镜像官方错误码。
 - `src/bridge-protocol.ts` —— host / client 共享的桥线协议类型（纯类型 + 前缀常量，双 tsc program 共用）。
 - `src/client/index.ts` —— 浏览器半：locale 注册 + `conversation.session.header.utilities` 槽注册（面板）+ `settings.plugin.item` 槽注册（插件配置卡片，`order: 1000` 排在最后）。
