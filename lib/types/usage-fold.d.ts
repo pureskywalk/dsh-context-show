@@ -1,14 +1,16 @@
 /**
  * Pure per-provider usage fold for the `contextUsage` session projection.
  *
- * The fold attributes every provider-reported usage sample
- * (`assistant/chunk` usage chunks and `assistant/message` usage) to the
- * provider/model route in force at that step — the latest `request/context`
- * or `request/header` route record. Per (turn, step), a repeated sample
+ * The fold attributes every provider-reported usage sample (the usage an
+ * `assistant/message` or `assistant/attempt` settlement reports, directly or
+ * through the last usage chunk of its compact stream) to the provider/model
+ * route in force at that step — the latest `request/context` or
+ * `request/header` route record. Per (turn, step), a repeated sample
  * replaces the step's earlier value instead of double counting it, exactly
- * like the token-meter `tokenUsage` unit; each provider keeps its own
- * last-sample slot because the session-log invariant guarantees a step's
- * usage samples are adjacent and share one route.
+ * like the token-meter `tokenUsage` unit; `llm/retry-started` closes the
+ * replacement slot so a retried attempt adds instead of replacing. Each
+ * provider keeps its own last-sample slot because the session-log invariant
+ * guarantees a step's usage samples are adjacent and share one route.
  *
  * Money pricing is time-aware: every sample is bucketed as peak or off-peak
  * by its event time (the configured peak-hour windows, evaluated in the

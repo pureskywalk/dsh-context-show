@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import type { ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { estimateNodeTokens, toolUsage } from '../src/client/estimate.ts'
 
 const userNode = (seq: number, text: string): ConversationNode => ({

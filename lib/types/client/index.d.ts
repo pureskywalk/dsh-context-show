@@ -5,7 +5,7 @@
  *
  * @module dsh-context-show/client
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import { type ContextShowKey } from './locales.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface LocaleNamespaceMap {
@@ -13,7 +13,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
         'context-show': ContextShowKey;
     }
 }
-/** Required services: slots, locale, the settings scope binder, and its wire. */
+/** Required services: slots (ui-renderer), locale, and the settings scope binder. */
 export declare const inject: string[];
 /**
  * Mount the meter entry and the pricing settings card.

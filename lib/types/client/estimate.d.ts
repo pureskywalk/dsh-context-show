@@ -11,7 +11,7 @@
  * @module dsh-context-show/estimate
  */
 import type { ContentBlock } from '@deepseek-ai/dsh-llm';
-import type { AssistantBlock, ConversationNode } from '@deepseek-ai/dsh-client-runtime/client';
+import type { AssistantBlock, ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client';
 /**
  * Price content blocks recursively under the fixed density heuristic.
  * @param blocks - content blocks to price without mutation.

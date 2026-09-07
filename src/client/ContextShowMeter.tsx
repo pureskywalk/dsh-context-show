@@ -20,8 +20,11 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-// Type-only: pulls the ui-conversation SlotMap merge (header utilities seat)
-// and the token-meter projection keys.
+// Type-only: pulls the standard-kit merges (ui-session supplies useSession/
+// useProjection, ui-chat supplies useChat) and the ui-conversation SlotMap
+// merge (header utilities seat), plus the token-meter projection keys.
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type { ContextBreakdownProjection, ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
@@ -89,8 +92,8 @@ function clampDrag(value: number, limit: number): number {
  * @returns the meter entry, always visible so the panel stays reachable.
  */
 export const ContextShowMeter = memo(function ContextShowMeter(props: ContextShowMeterProps) {
-  const { useSession, useProjection, t } = props
-  const nodes = useSession((snapshot) => snapshot.chat.legacy.nodes)
+  const { useChat, useProjection, t } = props
+  const nodes = useChat((snapshot) => snapshot.legacy.nodes)
   const pressure = useProjection('contextPressure')
   const breakdown = useProjection('contextBreakdown')
   const usage = useProjection('tokenUsage')

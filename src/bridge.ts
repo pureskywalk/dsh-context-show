@@ -16,7 +16,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { SettingsNamespace, SettingsPathOp, SettingsProvider } from '@deepseek-ai/dsh-settings'
-import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 import {
   CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX,
   type BridgeDescribeResult,
@@ -130,7 +130,7 @@ export interface BridgeDeps {
  */
 export function makeBridgeRoutes(deps: BridgeDeps): WebRoute[] {
   const { settings, llm } = deps
-  const namespace = settingsNamespace(BRIDGE_NAMESPACE) as SettingsNamespace
+  const namespace = BRIDGE_NAMESPACE as SettingsNamespace
   const describe = (): BridgeDescribeResult => {
     const descriptor = settings.describe({ redactSecrets: true }).find(candidate => String(candidate.ns) === BRIDGE_NAMESPACE)
     return {

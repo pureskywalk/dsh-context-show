@@ -10,7 +10,7 @@
  *
  * @module dsh-context-show/client/bridge-scope
  */
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client';
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
 /** Options of the compatibility scope wrapper. */
 export interface CompatScopeOptions<T> {
     /** Settings namespace the scope serves. */

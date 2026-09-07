@@ -10,7 +10,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the ui-settings-plugins SlotMap merge (settings.plugin.item
 // seat, declared at runtime by the configurable tab).
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'

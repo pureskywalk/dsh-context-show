@@ -21,7 +21,6 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import z from '@deepseek-ai/schemastery'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { makeBridgeRoutes } from './bridge.ts'
 import {
   createContextUsageProjectionDefinition,
@@ -51,7 +50,7 @@ export type { ContextUsageProjection, ProviderUsageProjection } from './projecti
  * Settings page edits. Spelled here rather than imported by the browser half
  * so the client can bind the same value without depending on a Host package.
  */
-export const CONTEXT_SHOW_SETTINGS_NAMESPACE = settingsNamespace('context-show')
+export const CONTEXT_SHOW_SETTINGS_NAMESPACE = 'context-show'
 
 /** Required host service: the projection registry the contextUsage unit folds into. */
 export const inject = ['sessionProjections']
@@ -143,7 +142,7 @@ export const Config: z<Config> = z.object({
 export function apply(ctx: Context, config: Config = {}): void {
   // The authoritative pricing source: the settings scope once the web
   // Settings page serves the namespace, the composition entry otherwise
-  // (installSettingsSection swaps it on attach and detach).
+  // (installSection swaps it on attach and detach).
   let current: () => Config = () => config ?? {}
   let disposeProjection: (() => void) | undefined
 
@@ -156,9 +155,14 @@ export function apply(ctx: Context, config: Config = {}): void {
     disposeProjection = ctx.sessionProjections.register(createContextUsageProjectionDefinition(spec))
   }
 
-  installSettingsSection(ctx, CONTEXT_SHOW_SETTINGS_NAMESPACE, Config, config ?? {}, {
-    setSource: (source) => { current = source },
-    onChange: rebuild,
+  // The settings provider registers the namespace with the composition entry
+  // as its base layer and swaps the authoritative source on attach / detach
+  // (0.1.3-alpha.1: installSection lives on the provider service).
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, CONTEXT_SHOW_SETTINGS_NAMESPACE, Config, config ?? {}, {
+      setSource: (source) => { current = source },
+      onChange: rebuild,
+    })
   })
   rebuild()
 

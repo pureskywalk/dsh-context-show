@@ -12,7 +12,7 @@
  */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { AssistantBlock, ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AssistantBlock, ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
 /** Fixed text-density estimate used until exact tokenization is needed. */
 const CHARS_PER_TOKEN = 4

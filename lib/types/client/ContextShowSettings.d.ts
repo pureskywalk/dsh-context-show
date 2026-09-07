@@ -8,7 +8,7 @@
  * @module dsh-context-show/ContextShowSettings
  */
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client';
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client';
 /** Client-side structural view of one route's price entry (wire JSON). */
 export interface PriceView {
     inputPerM: number;

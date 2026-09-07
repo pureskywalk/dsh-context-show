@@ -26,7 +26,7 @@ export type { ContextUsageProjection, ProviderUsageProjection } from './projecti
  * Settings page edits. Spelled here rather than imported by the browser half
  * so the client can bind the same value without depending on a Host package.
  */
-export declare const CONTEXT_SHOW_SETTINGS_NAMESPACE: import("@deepseek-ai/dsh-settings").SettingsNamespace;
+export declare const CONTEXT_SHOW_SETTINGS_NAMESPACE = "context-show";
 /** Required host service: the projection registry the contextUsage unit folds into. */
 export declare const inject: string[];
 /** Prices per 1M tokens of one route; base = off-peak, optional `peak` overrides. */

@@ -11,8 +11,8 @@
  * @module dsh-context-show/client/bridge-scope
  */
 
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
   CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX,
   type BridgeDescribeResult,
@@ -65,6 +65,15 @@ class BridgeScopeController<T> implements SettingsScope<T> {
   set = (field: string, value: unknown): Promise<void> => this.enqueue(() => this.write({ op: 'set', path: [field], value }))
   unset = (field: string): Promise<void> => this.enqueue(() => this.write({ op: 'unset', path: [field] }))
 
+  /** Queue one atomic batch of edits in order (one wire op per request). */
+  mutate = (ops: readonly unknown[], expectedRevision?: number): Promise<void> => {
+    let tail: Promise<void> = Promise.resolve()
+    for (const op of ops as readonly BridgeSettingsOp[]) {
+      tail = tail.then(() => this.enqueue(() => this.write(op, expectedRevision)))
+    }
+    return tail
+  }
+
   private enqueue(operation: () => Promise<void>): Promise<void> {
     if (this.disposed) return Promise.resolve()
     const task = this.tail.then(async () => {
@@ -103,8 +112,8 @@ class BridgeScopeController<T> implements SettingsScope<T> {
     this.accept(response.value.view, response.value.writable)
   }
 
-  private async write(op: BridgeSettingsOp): Promise<void> {
-    const revision = this.getSnapshot().revision
+  private async write(op: BridgeSettingsOp, expectedRevision?: number): Promise<void> {
+    const revision = expectedRevision ?? this.getSnapshot().revision
     let response: BridgeMutateResult
     try {
       const http = await fetch(CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX + '/mutate', {
@@ -197,6 +206,7 @@ export function createCompatScope<T>(options: CompatScopeOptions<T>): SettingsSc
     subscribe: listener => store.subscribe(listener),
     set: (field, value) => active().set(field, value),
     unset: field => active().unset(field),
+    mutate: (ops, expectedRevision) => active().mutate(ops, expectedRevision),
   }
   function active(): SettingsScope<T> {
     return options.primary.getSnapshot().status === 'ready' ? options.primary : fallback ?? options.primary

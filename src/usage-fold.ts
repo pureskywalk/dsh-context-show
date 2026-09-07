@@ -1,14 +1,16 @@
 /**
  * Pure per-provider usage fold for the `contextUsage` session projection.
  *
- * The fold attributes every provider-reported usage sample
- * (`assistant/chunk` usage chunks and `assistant/message` usage) to the
- * provider/model route in force at that step — the latest `request/context`
- * or `request/header` route record. Per (turn, step), a repeated sample
+ * The fold attributes every provider-reported usage sample (the usage an
+ * `assistant/message` or `assistant/attempt` settlement reports, directly or
+ * through the last usage chunk of its compact stream) to the provider/model
+ * route in force at that step — the latest `request/context` or
+ * `request/header` route record. Per (turn, step), a repeated sample
  * replaces the step's earlier value instead of double counting it, exactly
- * like the token-meter `tokenUsage` unit; each provider keeps its own
- * last-sample slot because the session-log invariant guarantees a step's
- * usage samples are adjacent and share one route.
+ * like the token-meter `tokenUsage` unit; `llm/retry-started` closes the
+ * replacement slot so a retried attempt adds instead of replacing. Each
+ * provider keeps its own last-sample slot because the session-log invariant
+ * guarantees a step's usage samples are adjacent and share one route.
  *
  * Money pricing is time-aware: every sample is bucketed as peak or off-peak
  * by its event time (the configured peak-hour windows, evaluated in the
@@ -28,7 +30,10 @@
  */
 
 import { z } from 'zod'
+import { expandAssistantStream } from '@deepseek-ai/dsh-llm'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
+// Type-only: pulls the llm/retry-started key into the host SessionEventMap.
+import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
@@ -374,13 +379,24 @@ const contextUsageSchema = z.object({
   timeZone: z.string().optional(),
 }).strict() as unknown as z.ZodType<ContextUsageProjection>
 
-/** The usage a chunk or finalized message reports for its step, if any. */
-const usageOf = (event: SessionEvent): TokenUsage | undefined =>
-  event.type === 'assistant/chunk' && event.data.chunk.type === 'usage'
-    ? event.data.chunk.usage
-    : event.type === 'assistant/message'
-      ? event.data.usage
-      : undefined
+/**
+ * The usage one durable Assistant settlement reports for its attempt, if any:
+ * the settlement's own `usage` field wins; otherwise the last usage chunk
+ * embedded in its compact stream (mirrors the token-meter tokenUsage unit).
+ */
+function usageOf(event: SessionEvent): TokenUsage | undefined {
+  if (event.type === 'assistant/message' && event.data.usage !== undefined) return event.data.usage
+  if (event.type !== 'assistant/message' && event.type !== 'assistant/attempt') return undefined
+  // Scan the compact stream backwards for its last usage chunk (ES2022-safe:
+  // no Array.prototype.toReversed in the host program's lib).
+  const members = expandAssistantStream(event.data.stream)
+  for (let index = members.length - 1; index >= 0; index -= 1) {
+    const member = members[index]
+    if (member === undefined) continue
+    if (member.chunk.type === 'usage') return member.chunk.usage
+  }
+  return undefined
+}
 
 /** Place one sample into a tiered bucket set, replacing a same-step sample in its original tier. */
 function applySample(
@@ -440,6 +456,33 @@ function attribute(
   }
 }
 
+/**
+ * Close the same-step replacement slot for a retried attempt: a retry
+ * re-runs the step, so its new usage sample must ADD to the totals instead of
+ * replacing the abandoned attempt's sample. Mirrors the token-meter unit's
+ * `llm/retry-started` handling; the buckets already accumulated stay put.
+ */
+function closeStep(state: ContextUsageState, turn: number, step: number): ContextUsageState {
+  const route = state.route
+  const key = route === undefined ? undefined : routeKeyOf(route.provider, route.model)
+  const entry = key === undefined ? undefined : state.providers[key]
+  const closesEntry = entry?.last !== null && entry !== undefined
+    && entry.last !== null
+    && entry.last.turn === turn
+    && entry.last.step === step
+  const closesUnattributed = state.unattributedLast !== null
+    && state.unattributedLast.turn === turn
+    && state.unattributedLast.step === step
+  if (!closesEntry && !closesUnattributed) return state
+  return {
+    ...state,
+    ...closesEntry && key !== undefined && entry !== undefined ? {
+      providers: { ...state.providers, [key]: { ...entry, last: null } },
+    } : {},
+    ...closesUnattributed ? { unattributedLast: null } : {},
+  }
+}
+
 const sumBuckets = (target: TokenUsageProjection, source: TokenUsageProjection): TokenUsageProjection => ({
   uncachedInputTokens: target.uncachedInputTokens + source.uncachedInputTokens,
   outputTokens: target.outputTokens + source.outputTokens,
@@ -493,17 +536,16 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
         if (state.route?.provider === provider && state.route.model === model) return state
         return { ...state, route: { provider, model } }
       }
-      let turn: number
-      let step: number
-      let usage: TokenUsage
-      if (event.type === 'assistant/chunk' && event.data.chunk.type === 'usage') {
-        ;({ turn, step } = event.data)
-        usage = event.data.chunk.usage
-      } else if (event.type === 'assistant/message' && event.data.usage !== undefined) {
-        ;({ turn, step, usage } = event.data)
-      } else {
-        return state
+      if (event.type === 'llm/retry-started') {
+        return closeStep(state, event.data.turn, event.data.step)
       }
+      // 0.1.3-alpha.1: usage rides the durable Assistant settlements only —
+      // assistant/message carries it in `usage` or its compact stream, and
+      // assistant/attempt carries a stream with no surface message.
+      if (event.type !== 'assistant/message' && event.type !== 'assistant/attempt') return state
+      const usage = usageOf(event)
+      if (usage === undefined) return state
+      const { turn, step } = event.data
       return attribute(state, turn, step, usage, spec.isPeakHour(event.time))
     },
     wire: {
@@ -546,6 +588,8 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
         }
       },
     },
-    stateVersion: 2,
+    // Fold semantics changed with 0.1.3-alpha.1 (settlement-stream usage),
+    // so any persisted projection cache must rebuild.
+    stateVersion: 3,
   } satisfies ProjectionDefinition<'contextUsage', ContextUsageState>
 }

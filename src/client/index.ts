@@ -6,12 +6,17 @@
  * @module dsh-context-show/client
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale), the
+// ui-renderer slots merge (ctx.slots), the ui-session standard kit merge
+// (useSession/useProjection/sessionId), the ui-chat kit merge (useChat), the
 // ui-conversation SlotMap merge (the header utilities seat), the ui-settings
 // scope binder, and the plugin-configuration slot merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
@@ -39,8 +44,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Settings namespace spelled by the host plugin (see src/index.ts). */
 const SETTINGS_NAMESPACE = 'context-show'
 
-/** Required services: slots, locale, the settings scope binder, and its wire. */
-export const inject = ['slots', 'locale', 'settingsScope', 'connection', 'remote']
+/** Required services: slots (ui-renderer), locale, and the settings scope binder. */
+export const inject = ['slots', 'locale', 'settingsScope']
 
 /** Unavailable scope used when the settings surface cannot bind the namespace. */
 function unavailableScope(): SettingsScope<ConfigView> {
@@ -50,6 +55,7 @@ function unavailableScope(): SettingsScope<ConfigView> {
     subscribe: () => () => {},
     set: async () => {},
     unset: async () => {},
+    mutate: async () => {},
   }
 }
 

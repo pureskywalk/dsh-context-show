@@ -93,6 +93,7 @@ function messageUsage(turn: number, step: number, input: number, output: number,
       turn,
       step,
       message: { role: 'assistant', content: [], id: 'm' },
+      stream: [],
       usage: {
         inputTokens: input,
         outputTokens: output,
@@ -101,6 +102,42 @@ function messageUsage(turn: number, step: number, input: number, output: number,
       },
     },
   } as SessionEvent
+}
+
+/** An assistant/attempt settlement carrying only a stream usage chunk. */
+function assistantAttempt(turn: number, step: number, input: number, output: number, extra: { cacheRead?: number; cacheWrite?: number; time?: number } = {}): SessionEvent {
+  return {
+    type: 'assistant/attempt',
+    seq: nextSeq(),
+    time: extra.time ?? TIME.offPeak,
+    data: {
+      turn,
+      step,
+      stream: [{
+        type: 'chunk',
+        time: extra.time ?? TIME.offPeak,
+        chunk: {
+          type: 'usage',
+          usage: {
+            inputTokens: input,
+            outputTokens: output,
+            ...(extra.cacheRead === undefined ? {} : { cacheReadTokens: extra.cacheRead }),
+            ...(extra.cacheWrite === undefined ? {} : { cacheWriteTokens: extra.cacheWrite }),
+          },
+        },
+      }],
+    },
+  } as unknown as SessionEvent
+}
+
+/** An `llm/retry-started` marker closing the same-step replacement slot. */
+function retryStarted(turn: number, step: number): SessionEvent {
+  return {
+    type: 'llm/retry-started',
+    seq: nextSeq(),
+    time: TIME.offPeak,
+    data: { turn, step },
+  } as unknown as SessionEvent
 }
 
 describe('isPeakHour', () => {
@@ -208,20 +245,30 @@ describe('contextUsage fold', () => {
     seq.value = 0
     const value = foldAll([
       header('deepseek-official', 'deepseek-v4-flash'),
-      // chunk at off-peak time, final message at peak time — same step
-      {
-        type: 'assistant/chunk',
-        seq: nextSeq(),
-        time: TIME.offPeak,
-        data: { turn: 1, step: 1, chunk: { type: 'usage', usage: { inputTokens: 1000, outputTokens: 100 } } },
-      } as unknown as SessionEvent,
+      // abandoned attempt at off-peak time, final message at peak time — same step
+      assistantAttempt(1, 1, 1000, 100, { time: TIME.offPeak }),
       messageUsage(1, 1, 1000, 100, { time: TIME.peak }),
       messageUsage(1, 2, 500, 50, { time: TIME.offPeak }),
     ], tieredSpec())
     expect(value.providers[0]).toMatchObject({ uncachedInputTokens: 1500, outputTokens: 150, steps: 2 })
-    // step 1 billed at peak rate only (chunk replaced), step 2 at base
+    // step 1 billed at peak rate only (attempt replaced), step 2 at base
     expect(value.providers[0]?.cost).toBeCloseTo((0.002 + 0.0004) + (0.0005 + 0.0001), 10)
     expect(value.totalCost).toBeCloseTo(0.003, 10)
+  })
+
+  it('adds a retried attempt instead of replacing the abandoned one', () => {
+    seq.value = 0
+    const value = foldAll([
+      header('deepseek-official', 'deepseek-v4-flash'),
+      assistantAttempt(1, 1, 1000, 100, { time: TIME.offPeak }),
+      retryStarted(1, 1),
+      assistantAttempt(1, 1, 1000, 100, { time: TIME.peak }),
+    ], tieredSpec())
+    // Without retry-started the second sample would replace (peak only); with
+    // it the retried attempt accumulates: off-peak base + peak rate.
+    expect(value.providers[0]).toMatchObject({ uncachedInputTokens: 2000, outputTokens: 200, steps: 2 })
+    expect(value.providers[0]?.cost).toBeCloseTo(0.0012 + 0.0024, 10)
+    expect(value.totalCost).toBeCloseTo(0.0036, 10)
   })
 
   it('keeps usage samples that landed before any route in the unattributed bucket', () => {
