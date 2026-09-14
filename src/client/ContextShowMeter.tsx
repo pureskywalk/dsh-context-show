@@ -81,6 +81,21 @@ function contextOccupancy(pressure: ContextPressureProjection | undefined): { pe
   }
 }
 
+/**
+ * Read one Session list entry's cached `contextUsage.today.cost` hint.
+ * The hint is structural JSON from the Session list (possibly stale or
+ * absent), so every field is validated before use.
+ * @param summary - one `SessionListState` entry (or anything).
+ * @returns today's estimated spend, or undefined when the hint is absent.
+ */
+function todayCostOf(summary: unknown): number | undefined {
+  const values = (summary as { projections?: { values?: Record<string, unknown> } })?.projections?.values
+  const value = values?.['contextUsage']
+  if (typeof value !== 'object' || value === null) return undefined
+  const cost = (value as { today?: { cost?: unknown } }).today?.cost
+  return typeof cost === 'number' && Number.isFinite(cost) ? cost : undefined
+}
+
 /** Clamp a dragged coordinate so most of the panel stays on screen. */
 function clampDrag(value: number, limit: number): number {
   return Math.min(Math.max(value, DRAG_MARGIN), limit - DRAG_MARGIN - DRAG_MIN_VISIBLE)
@@ -92,7 +107,7 @@ function clampDrag(value: number, limit: number): number {
  * @returns the meter entry, always visible so the panel stays reachable.
  */
 export const ContextShowMeter = memo(function ContextShowMeter(props: ContextShowMeterProps) {
-  const { useChat, useProjection, t } = props
+  const { useChat, useProjection, useSessions, sessionId, t } = props
   const nodes = useChat((snapshot) => snapshot.legacy.nodes)
   const pressure = useProjection('contextPressure')
   const breakdown = useProjection('contextBreakdown')
@@ -183,6 +198,35 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
     ? []
     : [...providerUsage.providers].sort((left, right) => right.cost - left.cost)
   const currency = providerUsage?.currency ?? 'CNY'
+
+  // Official pricing links, deduplicated per provider — shown once in the
+  // cost note instead of under every model row.
+  const priceLinks = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const row of providerUsage?.providers ?? []) {
+      if (row.priceUrl !== undefined && !seen.has(row.provider)) seen.set(row.provider, row.priceUrl)
+    }
+    return [...seen.entries()].map(([provider, url]) => ({ provider, url }))
+  }, [providerUsage])
+
+  // Today's spend: this Session comes from its live projection, every other
+  // Session from the list's cached projection hints. "This workspace" sums the
+  // Sessions sharing this Session's working directory.
+  const sessionsById = useSessions((state) => state.byId)
+  const todaySpend = useMemo(() => {
+    let total = 0
+    let workspace = 0
+    const currentCwd = sessionsById[sessionId]?.cwd
+    for (const [id, summary] of Object.entries(sessionsById)) {
+      const cost = id === sessionId
+        ? providerUsage?.today?.cost ?? todayCostOf(summary)
+        : todayCostOf(summary)
+      if (cost === undefined) continue
+      total += cost
+      if (currentCwd !== undefined && summary.cwd === currentCwd) workspace += cost
+    }
+    return { total, workspace }
+  }, [sessionsById, sessionId, providerUsage])
 
   return (
     <span ref={rootRef} className={styles.root}>
@@ -359,15 +403,6 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
                               output: formatTokens(model.outputTokens),
                             })}
                           </span>
-                          {model.priceUrl !== undefined && (
-                            <a
-                              className={styles.priceLink}
-                              href={model.priceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(event) => { event.stopPropagation() }}
-                            >{t('context.officialPrice')}</a>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -388,7 +423,31 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
                       </div>
                     )}
                   </div>
-                  <p className={styles.priceNote}>{t('context.priceNote')}</p>
+                  <p className={styles.priceNote}>
+                    {t('context.priceNote')}
+                    {priceLinks.map((link, index) => (
+                      <span key={link.provider}>
+                        {(index === 0 ? ' · ' : ' · ')}
+                        <a
+                          className={styles.priceLink}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(event) => { event.stopPropagation() }}
+                        >{t('context.officialPriceFor', { provider: link.provider })}</a>
+                      </span>
+                    ))}
+                  </p>
+                  <dl className={styles.rows}>
+                    <div className={styles.row}>
+                      <dt>{t('context.todayWorkspace')}</dt>
+                      <dd>{formatMoney(todaySpend.workspace, currency)}</dd>
+                    </div>
+                    <div className={styles.row}>
+                      <dt>{t('context.todayTotal')}</dt>
+                      <dd>{formatMoney(todaySpend.total, currency)}</dd>
+                    </div>
+                  </dl>
                 </>
               )}
 

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   createContextUsageProjectionDefinition,
+  dayKeyOf,
   createPriceResolver,
   createPricingSpec,
   effectivePeak,
@@ -374,5 +375,67 @@ describe('contextUsage fold', () => {
     seq.value = 0
     const second = foldAll(events, tieredSpec())
     expect(second).toEqual(first)
+  })
+})
+
+describe('per-day (today) spend', () => {
+  /** Day A / day B at 11:00 Beijing, and "now" on day B afternoon. */
+  const DAY_A = Date.UTC(2026, 8, 13, 3, 0)
+  const DAY_B = Date.UTC(2026, 8, 14, 3, 0)
+  const NOW = Date.UTC(2026, 8, 14, 5, 0)
+
+  const specWithNow = (): PricingSpec => ({ ...flatSpec(), now: () => NOW })
+
+  it('keys a billing day in the pricing timezone (UTC midnight rolls over)', () => {
+    expect(dayKeyOf(Date.UTC(2026, 8, 13, 3, 0), 'Asia/Shanghai')).toBe('2026-09-13')
+    expect(dayKeyOf(Date.UTC(2026, 8, 13, 17, 0), 'Asia/Shanghai')).toBe('2026-09-14')
+  })
+
+  it('reports only the current billing day', () => {
+    seq.value = 0
+    const value = foldAll([
+      header('deepseek-official', 'deepseek-v4-flash'),
+      messageUsage(1, 1, 1000, 100, { time: DAY_A }),
+      messageUsage(2, 1, 2000, 200, { time: DAY_B }),
+    ], specWithNow())
+    expect(value.today.date).toBe('2026-09-14')
+    expect(value.today.total).toEqual({
+      uncachedInputTokens: 2000,
+      outputTokens: 200,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
+    // TEST_PRICES deepseek-official: input 1, output 2 per 1M.
+    expect(value.today.cost).toBeCloseTo((2000 * 1 + 200 * 2) / 1_000_000, 10)
+    // The cumulative total still covers both days.
+    expect(value.total).toEqual({
+      uncachedInputTokens: 3000,
+      outputTokens: 300,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
+  })
+
+  it('moves a same-step replacement out of the day it replaced', () => {
+    seq.value = 0
+    const value = foldAll([
+      header('deepseek-official', 'deepseek-v4-flash'),
+      messageUsage(1, 1, 1000, 100, { time: DAY_A }),
+      messageUsage(1, 1, 3000, 300, { time: DAY_B }),
+    ], specWithNow())
+    expect(value.providers[0]?.steps).toBe(1)
+    expect(value.total).toEqual({
+      uncachedInputTokens: 3000,
+      outputTokens: 300,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
+    expect(value.today.total).toEqual({
+      uncachedInputTokens: 3000,
+      outputTokens: 300,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
+    expect(value.today.cost).toBeCloseTo((3000 * 1 + 300 * 2) / 1_000_000, 10)
   })
 })

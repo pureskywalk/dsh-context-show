@@ -105,6 +105,8 @@ export interface PricingSpec {
   timeZone?: string
   /** Whether the given event time falls in a peak window. */
   isPeakHour(timeMs: number): boolean
+  /** Clock used to decide which day "today" is; defaults to `Date.now`. */
+  now?(): number
 }
 
 /**
@@ -234,6 +236,7 @@ export function createPricingSpec(config: {
     resolve: (provider, model) => resolver.resolve(provider, model),
     priceUrl: (provider) => config.priceUrls?.[provider] ?? config.defaultPriceUrl,
     isPeakHour: (timeMs) => isPeakHour(timeMs, peakHours, timeZone),
+    now: () => Date.now(),
     ...(peakHours.length === 0 ? {} : { peakHours, timeZone }),
   }
 }
@@ -286,7 +289,12 @@ interface UsageSample {
   step: number
   buckets: TokenUsageProjection
   tier: 'peak' | 'offPeak'
+  /** Billing day (`YYYY-MM-DD` in the pricing timezone) the sample landed on. */
+  day: string
 }
+
+/** Per-day, per-route tiered buckets: day → route key (`provider\0model`, `` = unattributed) → buckets. */
+type UsageDays = Record<string, Record<string, TierBuckets>>
 
 /** One provider/model row of the fold state. */
 interface ProviderState {
@@ -309,6 +317,12 @@ export interface ContextUsageState {
   unattributed: TierBuckets
   /** Last unattributed sample, for same-step replacement. */
   unattributedLast: UsageSample | null
+  /**
+   * Same samples keyed by billing day, so the panel can report "today"
+   * without replaying: day → route key → tiered buckets. Same-step
+   * replacement subtracts from the day the replaced sample landed on.
+   */
+  days: UsageDays
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
@@ -346,6 +360,7 @@ const usageSampleSchema = z.object({
   step: z.number().int().nonnegative(),
   buckets: bucketSchema,
   tier: z.enum(['peak', 'offPeak']),
+  day: z.string(),
 }).strict()
 
 const tierBucketsSchema = z.object({
@@ -367,6 +382,7 @@ const contextUsageStateSchema = z.object({
   order: z.array(z.string()),
   unattributed: tierBucketsSchema,
   unattributedLast: usageSampleSchema.nullable(),
+  days: z.record(z.string(), z.record(z.string(), tierBucketsSchema)),
 }).strict() as unknown as z.ZodType<ContextUsageState>
 
 const contextUsageSchema = z.object({
@@ -376,6 +392,11 @@ const contextUsageSchema = z.object({
   unattributed: bucketSchema,
   totalCost: z.number().nonnegative(),
   unattributedCost: z.number().nonnegative(),
+  today: z.object({
+    date: z.string(),
+    cost: z.number().nonnegative(),
+    total: bucketSchema,
+  }).strict(),
   peakHours: z.array(peakHourSchema).optional(),
   timeZone: z.string().optional(),
 }).strict() as unknown as z.ZodType<ContextUsageProjection>
@@ -391,6 +412,49 @@ function usageOf(event: SessionEvent): TokenUsage | undefined {
   // The settlement's own usage wins; otherwise the last usage chunk embedded
   // in its compact stream (same helper the token-meter unit uses).
   return lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
+}
+
+/** Billing day (`YYYY-MM-DD`) of one instant in the pricing timezone. */
+export function dayKeyOf(timeMs: number, timeZone: string = DEFAULT_TIME_ZONE): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(timeMs))
+}
+
+/** Add one sample's buckets to its day/route cell (returns a fresh `days`). */
+function addToDays(
+  days: UsageDays,
+  day: string,
+  route: string,
+  tier: 'peak' | 'offPeak',
+  buckets: TokenUsageProjection,
+): UsageDays {
+  const dayRow = days[day] ?? {}
+  const cell = dayRow[route] ?? zeroTierBuckets()
+  const nextCell: TierBuckets = { peak: cell.peak, offPeak: cell.offPeak }
+  nextCell[tier] = addBuckets(cell[tier], buckets)
+  return { ...days, [day]: { ...dayRow, [route]: nextCell } }
+}
+
+/** Subtract a replaced sample's buckets from its day/route cell. */
+function subFromDays(
+  days: UsageDays,
+  day: string,
+  route: string,
+  tier: 'peak' | 'offPeak',
+  buckets: TokenUsageProjection,
+): UsageDays {
+  const dayRow = days[day]
+  const cell = dayRow?.[route]
+  if (dayRow === undefined || cell === undefined) return days
+  const nextCell: TierBuckets = { peak: cell.peak, offPeak: cell.offPeak }
+  nextCell[tier] = subBuckets(cell[tier], buckets)
+  return { ...days, [day]: { ...dayRow, [route]: nextCell } }
+}
+
+/** Resolve the price of a `provider\0model` day-cell key (`` = unattributed). */
+function priceOfRouteKey(route: string, resolve: PricingSpec['resolve']): TokenPrice {
+  const at = route.indexOf(ROUTE_SEPARATOR)
+  return at === -1 ? resolve('', '') : resolve(route.slice(0, at), route.slice(at + 1))
 }
 
 /** Place one sample into a tiered bucket set, replacing a same-step sample in its original tier. */
@@ -416,27 +480,40 @@ function attribute(
   step: number,
   usage: TokenUsage,
   isPeak: boolean,
+  day: string,
 ): ContextUsageState {
   const buckets = bucketsFrom(usage)
-  const sample: UsageSample = { turn, step, buckets, tier: isPeak ? 'peak' : 'offPeak' }
+  const sample: UsageSample = { turn, step, buckets, tier: isPeak ? 'peak' : 'offPeak', day }
   const route = state.route
 
   if (route === undefined) {
-    const applied = applySample(state.unattributed, state.unattributedLast, sample)
-    const unchanged = state.unattributedLast !== null
-      && applied.last.tier === state.unattributedLast.tier
-      && bucketsEqual(applied.last.buckets, state.unattributedLast.buckets)
-    if (unchanged && bucketsEqual(applied.buckets[applied.last.tier], state.unattributed[applied.last.tier])) return state
-    return { ...state, unattributed: applied.buckets, unattributedLast: applied.last }
+    const previous = state.unattributedLast
+    const applied = applySample(state.unattributed, previous, sample)
+    const unchanged = previous !== null
+      && applied.last.tier === previous.tier
+      && bucketsEqual(applied.last.buckets, previous.buckets)
+    // Same-step replacement also moves the day bucket: subtract the replaced
+    // sample from its own day before adding the new one.
+    let days = state.days
+    if (previous !== null && previous.turn === turn && previous.step === step) {
+      days = subFromDays(days, previous.day, '', previous.tier, previous.buckets)
+    }
+    days = addToDays(days, day, '', sample.tier, sample.buckets)
+    if (unchanged && days === state.days
+      && bucketsEqual(applied.buckets[applied.last.tier], state.unattributed[applied.last.tier])) return state
+    return { ...state, unattributed: applied.buckets, unattributedLast: applied.last, days }
   }
 
   const key = routeKeyOf(route.provider, route.model)
   const existing = state.providers[key]
-  const applied = applySample(existing?.buckets ?? zeroTierBuckets(), existing?.last ?? null, sample)
-  const replaced = existing?.last !== null && existing !== undefined
-    && existing.last !== null
-    && existing.last.turn === turn
-    && existing.last.step === step
+  const previous = existing?.last ?? null
+  const applied = applySample(existing?.buckets ?? zeroTierBuckets(), previous, sample)
+  const replaced = previous !== null && previous.turn === turn && previous.step === step
+  let days = state.days
+  if (previous !== null && replaced) {
+    days = subFromDays(days, previous.day, key, previous.tier, previous.buckets)
+  }
+  days = addToDays(days, day, key, sample.tier, sample.buckets)
   const nextEntry: ProviderState = {
     provider: route.provider,
     model: route.model,
@@ -448,6 +525,7 @@ function attribute(
     ...state,
     providers: { ...state.providers, [key]: nextEntry },
     order: existing === undefined ? [...state.order, key] : state.order,
+    days,
   }
 }
 
@@ -519,6 +597,7 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
       order: [],
       unattributed: zeroTierBuckets(),
       unattributedLast: null,
+      days: {},
     }),
     apply: (state, event) => {
       if (event.type === 'request/context') {
@@ -541,7 +620,7 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
       const usage = usageOf(event)
       if (usage === undefined) return state
       const { turn, step } = event.data
-      return attribute(state, turn, step, usage, spec.isPeakHour(event.time))
+      return attribute(state, turn, step, usage, spec.isPeakHour(event.time), dayKeyOf(event.time, spec.timeZone))
     },
     wire: {
       viewSchema: contextUsageSchema,
@@ -569,6 +648,17 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
       }
       const unattributedTiered = sumBuckets(state.unattributed.peak, state.unattributed.offPeak)
       const unattributedCost = costOfTiered(state.unattributed, spec.resolve('', ''))
+      // "Today" (pricing timezone) spend over the day's route cells. The
+      // client sums these per-Session figures across the Session list to
+      // report the current workspace's / every workspace's daily spend.
+      const todayKey = dayKeyOf(spec.now?.() ?? Date.now(), spec.timeZone)
+      const todayRow = state.days[todayKey] ?? {}
+      let todayCost = 0
+      let todayTotal = zeroBuckets()
+      for (const [route, tiered] of Object.entries(todayRow)) {
+        todayTotal = sumBuckets(todayTotal, sumBuckets(tiered.peak, tiered.offPeak))
+        todayCost += costOfTiered(tiered, priceOfRouteKey(route, spec.resolve))
+      }
       return {
         currency: spec.currency,
         total: sumBuckets(total, unattributedTiered),
@@ -576,6 +666,7 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
         unattributed: unattributedTiered,
         totalCost: totalCost + unattributedCost,
         unattributedCost,
+        today: { date: todayKey, cost: todayCost, total: todayTotal },
         ...(spec.peakHours === undefined || spec.peakHours.length === 0 ? {} : {
           peakHours: spec.peakHours,
           timeZone: spec.timeZone,
@@ -583,8 +674,8 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
         }
       },
     },
-    // Fold semantics changed with 0.1.3-alpha.1 (settlement-stream usage),
-    // so any persisted projection cache must rebuild.
-    stateVersion: 3,
+    // 3: settlement-stream usage (0.1.3-alpha.1). 4: per-day buckets for the
+    // "today" spend figures, so any persisted cache must rebuild.
+    stateVersion: 4,
   } satisfies ProjectionDefinition<'contextUsage', ContextUsageState>
 }

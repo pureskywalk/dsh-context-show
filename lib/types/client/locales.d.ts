@@ -22,6 +22,9 @@ export declare const zh: {
     'context.peakHours': string;
     'context.priceNote': string;
     'context.officialPrice': string;
+    'context.officialPriceFor': string;
+    'context.todayWorkspace': string;
+    'context.todayTotal': string;
     'context.tokens': string;
     'context.usageInput': string;
     'context.usageOutput': string;
@@ -92,6 +95,9 @@ export declare const en: {
     'context.peakHours': string;
     'context.priceNote': string;
     'context.officialPrice': string;
+    'context.officialPriceFor': string;
+    'context.todayWorkspace': string;
+    'context.todayTotal': string;
     'context.tokens': string;
     'context.usageInput': string;
     'context.usageOutput': string;

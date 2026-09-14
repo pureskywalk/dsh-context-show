@@ -71,6 +71,18 @@ export interface ContextUsageProjection {
     totalCost: number;
     /** Estimated spend of the unattributed bucket (default price). */
     unattributedCost: number;
+    /**
+     * Spend of the current billing day (the pricing timezone's `YYYY-MM-DD`),
+     * so the client can sum today across Sessions for workspace / global totals.
+     */
+    today: {
+        /** Billing day key this figure was computed for. */
+        date: string;
+        /** Estimated spend of the day, in the configured currency. */
+        cost: number;
+        /** Tokens billed on the day. */
+        total: TokenUsageProjection;
+    };
     /** Peak-hour windows used for tiering; absent means flat pricing. */
     peakHours?: readonly PeakHourRange[];
     /** IANA timezone the peak hours were evaluated in. */

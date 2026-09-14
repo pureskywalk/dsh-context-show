@@ -87,6 +87,8 @@ export interface PricingSpec {
     timeZone?: string;
     /** Whether the given event time falls in a peak window. */
     isPeakHour(timeMs: number): boolean;
+    /** Clock used to decide which day "today" is; defaults to `Date.now`. */
+    now?(): number;
 }
 /**
  * Default DeepSeek official pricing (deepseek-flash / V4.1-Flash tier, CNY —
@@ -147,7 +149,11 @@ interface UsageSample {
     step: number;
     buckets: TokenUsageProjection;
     tier: 'peak' | 'offPeak';
+    /** Billing day (`YYYY-MM-DD` in the pricing timezone) the sample landed on. */
+    day: string;
 }
+/** Per-day, per-route tiered buckets: day → route key (`provider\0model`, `` = unattributed) → buckets. */
+type UsageDays = Record<string, Record<string, TierBuckets>>;
 /** One provider/model row of the fold state. */
 interface ProviderState {
     provider: string;
@@ -171,12 +177,20 @@ export interface ContextUsageState {
     unattributed: TierBuckets;
     /** Last unattributed sample, for same-step replacement. */
     unattributedLast: UsageSample | null;
+    /**
+     * Same samples keyed by billing day, so the panel can report "today"
+     * without replaying: day → route key → tiered buckets. Same-step
+     * replacement subtracts from the day the replaced sample landed on.
+     */
+    days: UsageDays;
 }
 declare module '@deepseek-ai/dsh-session-projection/types' {
     interface SessionProjectionStateMap {
         contextUsage: ContextUsageState;
     }
 }
+/** Billing day (`YYYY-MM-DD`) of one instant in the pricing timezone. */
+export declare function dayKeyOf(timeMs: number, timeZone?: string): string;
 /**
  * Create the replayable `contextUsage` projection definition, priced by the
  * given spec. The spec is captured at registration time; a price or peak
@@ -195,6 +209,7 @@ export declare function createContextUsageProjectionDefinition(spec: PricingSpec
         order: never[];
         unattributed: TierBuckets;
         unattributedLast: null;
+        days: {};
     };
     apply: (state: NoInfer<ContextUsageState>, event: SessionEvent) => ContextUsageState;
     wire: {
