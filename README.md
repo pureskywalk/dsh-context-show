@@ -89,11 +89,15 @@ pnpm verify      # typecheck + test + build
 
 ## 架构
 
-- `src/index.ts` —— host 插件入口：`inject = ['sessionProjections']`（必需服务）+ Config（币种 + 分时时段 + 价格表 + 官方价格链接，schemastery schema）+ 通过 `ctx.inject(['settings'])` 走 `ctx.settings.installSection(...)` 注册 `context-show` 设置命名空间（设置页读写 + 改后热重注册投影；0.1.3-alpha.1 起设置注册是 provider 方法）+ 直接 `ctx.sessionProjections.register(...)` 注册带定价 spec 的 `contextUsage` 投影单元（改价时 dispose 旧单元再注册新 spec，重新折叠计价）+ 挂载 loopback 设置桥路由。
-- `src/usage-fold.ts` —— 纯函数折叠：`request/header` 与 `request/context` 记录当前路由，`assistant/message` 与 `assistant/attempt` 结算事件（优先 `usage` 字段、否则反扫内嵌 stream 的最后一个 usage chunk）按事件时间归入高峰 / 闲时桶并归因到当时路由；`llm/retry-started` 关闭同一步替换槽，重试的 attempt 累加而不覆盖；状态为纯 JSON（投影缓存前提，经 `stateSchema` 校验，`stateVersion` 3），按 `provider\0model` 建表 + 首次使用顺序，每 provider 一个 last-sample 槽做同一步替换（跨档位替换不重复计费）；金额、币种、时段与官方价格链接在 `wire.view()` 阶段从累计桶计算，不进入折叠状态；同时通过 module augmentation 把 `contextUsage` 折叠态并进 `SessionProjectionStateMap`。
+- `src/index.ts` —— host 插件入口：`inject = ['sessionProjections']`（必需服务）+ Config（币种 + 分时时段 + 价格表 + 官方价格链接，schemastery schema）+ 通过 `ctx.inject(['settings'])` 走 `ctx.settings.installSection(...)` 注册 `context-show` 设置命名空间（设置页读写 + 改后热重注册投影；0.1.3-alpha.1 起设置注册是 provider 方法）+ 直接 `ctx.sessionProjections.register(...)` 注册带定价 spec 的 `contextUsage` 投影单元（改价时 dispose 旧单元再注册新 spec，重新折叠计价）+ 维护**持久花费账本**（`$DSH_HOME/storages/dsh-context-show/spend-ledger.json`：投影变更订阅 + 桥请求时折叠 → 1s 防抖原子写、卸载 flush）+ 挂载 loopback 桥（settings describe/mutate、models、spend）。
+- `src/usage-fold.ts` —— 纯函数折叠：`request/header` 与 `request/context` 记录当前路由与**请求时刻**，`assistant/message` 与 `assistant/attempt` 结算事件（优先 `usage` 字段、否则取内嵌 stream 的最后一个 usage chunk）按**请求时刻**归入高峰 / 闲时桶并归因到当时路由；`llm/retry-started` 关闭同一步替换槽，重试的 attempt 累加而不覆盖；`event.seq < inheritedEventCount` 的 **fork / 延续继承前缀直接跳过**（祖先已付费）；状态为纯 JSON（经 `stateSchema` 校验，`stateVersion` 5），按 `provider\0model` 建表 + 首次使用顺序，每 provider 一个 last-sample 槽做同一步替换（跨档位不重复计费），并按「日 × 路由」分桶（`days`）供今日金额；金额、币种、时段与官方价格链接在 `wire.view()` 阶段计算，不进入折叠状态；通过 module augmentation 把 `contextUsage` 折叠态并进 `SessionProjectionStateMap`。
 - `src/projection.ts` —— 共享类型 + `SessionProjectionMap`（客户端 wire 视图）表 merge；`src/usage-fold.ts` 另 augment `SessionProjectionStateMap`（主机折叠态）。host 注册、client `useProjection('contextUsage')` 共用同一 wire 类型表。
-- `src/bridge.ts` —— host 侧的 loopback 设置桥：`/api/dsh-context-show/settings/describe|mutate`（仅回环、仅 POST），直连 settings seam，镜像官方错误码。
+- `src/bridge.ts` —— host 侧 loopback 桥（仅回环、仅 POST）：设置 `/api/dsh-context-show/settings/describe|mutate`（直连 settings seam、镜像官方错误码）、模型目录 `/settings/models`、跨会话花费 `/settings/spend`（返回账本聚合快照）。
 - `src/bridge-protocol.ts` —— host / client 共享的桥线协议类型（纯类型 + 前缀常量，双 tsc program 共用）。
+- `src/spend.ts` —— 跨会话花费聚合：把每会话样本按「日 + 工作目录（cwd）+ 路由」折成面板快照（今日、累计、按模型明细）。
+- `src/spend-ledger.ts` —— 持久账本：容错解析、按会话幂等覆盖、临时文件 + rename 原子写、1s 防抖与卸载 flush；路径由官方 `dshHomePath()` 解析。
+- `src/spend-protocol.ts` —— host / client 共享的花费快照类型（纯类型；client 侧只 `import type`，不把 host 代码带进 bundle）。
+- `src/client/price-input.ts` —— 价格单元格的十进制解析（允许 `0.`、`.5` 等输入中间态，非法文本忽略并保留上一个有效值）。
 - `src/client/index.ts` —— 浏览器半：locale 注册 + `conversation.session.header.utilities` 槽注册（面板）+ `settings.plugin.item` 槽注册（插件配置卡片，`order: 1000` 排在最后）。
 - `src/client/bridge-scope.ts` —— rc.6 兼容 settings scope：官方 scope 为主，报 unavailable 且浏览器为回环时回退到桥控制器（串行队列 + revision 栅栏 + 失败重读）。
 - `src/client/ContextShowMeter.tsx` —— 触发器 + 可拖动持久面板（抓手 pointer 拖拽、fixed 定位、省略/详细两态、Escape / 按钮关闭，`aria-*`，focus-visible）。
@@ -105,6 +109,8 @@ pnpm verify      # typecheck + test + build
 ## 验证
 
 `pnpm verify` 覆盖：双 tsc 类型检查、usage-fold 的重放确定性 / 路由归因 / 同一步替换（含跨高峰档位替换）/ 未归属桶 / 缓存桶 / 分时与平价金额计算 / 默认价回退 / 币种与官方价格链接 / 高峰时段判定（含跨午夜与北京时区）、快照估价与工具聚合、token/金额格式化。
+
+其中 `test/cost.test.ts` 用官方价**手算核对**金额（四桶、峰谷、替换、跨日一致性）、`test/spend.test.ts` 与 `test/spend-ledger.test.ts` 覆盖跨会话聚合与账本「序列化 → 重读」往返、`test/price-input.test.ts` 覆盖价格输入解析（`0.`/`.5`/非法文本）。
 
 另外：
 
