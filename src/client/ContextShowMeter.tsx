@@ -17,7 +17,7 @@
  * @module dsh-context-show/ContextShowMeter
  */
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the standard-kit merges (ui-session supplies useSession/
@@ -81,19 +81,36 @@ function contextOccupancy(pressure: ContextPressureProjection | undefined): { pe
   }
 }
 
+/** One model's spend inside a today range (empty provider = unattributed). */
+interface TodayRouteRow {
+  provider: string
+  model: string
+  cost: number
+}
+
 /**
- * Read one Session list entry's cached `contextUsage.today.cost` hint.
- * The hint is structural JSON from the Session list (possibly stale or
- * absent), so every field is validated before use.
+ * Read one Session list entry's cached `contextUsage.today` hint: the day's
+ * spend plus its per-model breakdown.
  * @param summary - one `SessionListState` entry (or anything).
- * @returns today's estimated spend, or undefined when the hint is absent.
+ * @returns today's spend and routes, or undefined when the hint is absent.
  */
-function todayCostOf(summary: unknown): number | undefined {
+function todayOf(summary: unknown): { cost: number; routes: readonly TodayRouteRow[] } | undefined {
   const values = (summary as { projections?: { values?: Record<string, unknown> } })?.projections?.values
   const value = values?.['contextUsage']
   if (typeof value !== 'object' || value === null) return undefined
-  const cost = (value as { today?: { cost?: unknown } }).today?.cost
-  return typeof cost === 'number' && Number.isFinite(cost) ? cost : undefined
+  const today = (value as { today?: { cost?: unknown; routes?: unknown } }).today
+  if (today === undefined || typeof today.cost !== 'number' || !Number.isFinite(today.cost)) return undefined
+  const routes: TodayRouteRow[] = []
+  if (Array.isArray(today.routes)) {
+    for (const raw of today.routes) {
+      if (typeof raw !== 'object' || raw === null) continue
+      const row = raw as { provider?: unknown; model?: unknown; cost?: unknown }
+      if (typeof row.provider !== 'string' || typeof row.model !== 'string') continue
+      if (typeof row.cost !== 'number' || !Number.isFinite(row.cost)) continue
+      routes.push({ provider: row.provider, model: row.model, cost: row.cost })
+    }
+  }
+  return { cost: today.cost, routes }
 }
 
 /** Clamp a dragged coordinate so most of the panel stays on screen. */
@@ -214,19 +231,44 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
   // Sessions sharing this Session's working directory.
   const sessionsById = useSessions((state) => state.byId)
   const todaySpend = useMemo(() => {
+    const currentCwd = sessionsById[sessionId]?.cwd
     let total = 0
     let workspace = 0
-    const currentCwd = sessionsById[sessionId]?.cwd
-    for (const [id, summary] of Object.entries(sessionsById)) {
-      const cost = id === sessionId
-        ? providerUsage?.today?.cost ?? todayCostOf(summary)
-        : todayCostOf(summary)
-      if (cost === undefined) continue
-      total += cost
-      if (currentCwd !== undefined && summary.cwd === currentCwd) workspace += cost
+    const allRoutes = new Map<string, TodayRouteRow>()
+    const workspaceRoutes = new Map<string, TodayRouteRow>()
+    const accumulate = (into: Map<string, TodayRouteRow>, route: TodayRouteRow): void => {
+      const key = route.provider + '\u0000' + route.model
+      const existing = into.get(key)
+      if (existing === undefined) into.set(key, { ...route })
+      else existing.cost += route.cost
     }
-    return { total, workspace }
+    for (const [id, summary] of Object.entries(sessionsById)) {
+      const live = id === sessionId ? providerUsage?.today : undefined
+      const value = live === undefined ? todayOf(summary) : { cost: live.cost, routes: live.routes }
+      if (value === undefined) continue
+      total += value.cost
+      const inWorkspace = currentCwd !== undefined && summary.cwd === currentCwd
+      if (inWorkspace) workspace += value.cost
+      for (const route of value.routes) {
+        accumulate(allRoutes, route)
+        if (inWorkspace) accumulate(workspaceRoutes, route)
+      }
+    }
+    const sortRows = (rows: Map<string, TodayRouteRow>): TodayRouteRow[] =>
+      [...rows.values()].sort((left, right) => right.cost - left.cost || left.model.localeCompare(right.model))
+    return { total, workspace, all: sortRows(allRoutes), workspaceRows: sortRows(workspaceRoutes) }
   }, [sessionsById, sessionId, providerUsage])
+
+  /** One indented row per model inside a today range. */
+  const todayRouteRows = (rows: readonly TodayRouteRow[], keyPrefix: string): ReactNode =>
+    rows.map((route, index) => (
+      <div className={styles.todayRouteRow} key={keyPrefix + String(index) + route.provider + route.model}>
+        <dt title={route.provider === '' ? undefined : route.provider}>
+          {route.model === '' ? t('context.unattributed') : route.model}
+        </dt>
+        <dd>{formatMoney(route.cost, currency)}</dd>
+      </div>
+    ))
 
   return (
     <span ref={rootRef} className={styles.root}>
@@ -324,6 +366,20 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
 
           {!detail ? (
             <>
+              {hasProviderRows && providerUsage !== undefined && (
+                <dl className={styles.rows}>
+                  <div className={styles.row}>
+                    <dt>{t('context.todayWorkspace')}</dt>
+                    <dd>{formatMoney(todaySpend.workspace, currency)}</dd>
+                  </div>
+                  {todayRouteRows(todaySpend.workspaceRows, 'cw')}
+                  <div className={styles.row}>
+                    <dt>{t('context.todayTotal')}</dt>
+                    <dd>{formatMoney(todaySpend.total, currency)}</dd>
+                  </div>
+                  {todayRouteRows(todaySpend.all, 'ca')}
+                </dl>
+              )}
               {!anyData && <p className={styles.empty}>{t('context.noUsage')}</p>}
             </>
           ) : (
@@ -443,10 +499,12 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
                       <dt>{t('context.todayWorkspace')}</dt>
                       <dd>{formatMoney(todaySpend.workspace, currency)}</dd>
                     </div>
+                    {todayRouteRows(todaySpend.workspaceRows, 'dw')}
                     <div className={styles.row}>
                       <dt>{t('context.todayTotal')}</dt>
                       <dd>{formatMoney(todaySpend.total, currency)}</dd>
                     </div>
+                    {todayRouteRows(todaySpend.all, 'da')}
                   </dl>
                 </>
               )}

@@ -37,7 +37,7 @@ import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
-import type { ContextUsageProjection, ProviderUsageProjection } from './projection.ts'
+import type { ContextUsageProjection, ProviderTodayUsage, ProviderUsageProjection } from './projection.ts'
 
 /** Route separator inside the provider table key (never valid in a route id). */
 const ROUTE_SEPARATOR = '\u0000'
@@ -399,6 +399,12 @@ const contextUsageSchema = z.object({
     date: z.string(),
     cost: z.number().nonnegative(),
     total: bucketSchema,
+    routes: z.array(z.object({
+      provider: z.string(),
+      model: z.string(),
+      cost: z.number().nonnegative(),
+      total: bucketSchema,
+    }).strict()),
   }).strict(),
   peakHours: z.array(peakHourSchema).optional(),
   timeZone: z.string().optional(),
@@ -658,10 +664,24 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
       const todayRow = state.days[todayKey] ?? {}
       let todayCost = 0
       let todayTotal = zeroBuckets()
+      const todayRoutes: ProviderTodayUsage[] = []
       for (const [route, tiered] of Object.entries(todayRow)) {
-        todayTotal = sumBuckets(todayTotal, sumBuckets(tiered.peak, tiered.offPeak))
-        todayCost += costOfTiered(tiered, priceOfRouteKey(route, spec.resolve))
+        const routeTotal = sumBuckets(tiered.peak, tiered.offPeak)
+        const routeCost = costOfTiered(tiered, priceOfRouteKey(route, spec.resolve))
+        todayTotal = sumBuckets(todayTotal, routeTotal)
+        todayCost += routeCost
+        const tokens = routeTotal.uncachedInputTokens + routeTotal.outputTokens
+          + routeTotal.cacheReadTokens + routeTotal.cacheWriteTokens
+        if (tokens === 0 && routeCost === 0) continue
+        const at = route.indexOf(ROUTE_SEPARATOR)
+        todayRoutes.push({
+          provider: at === -1 ? '' : route.slice(0, at),
+          model: at === -1 ? '' : route.slice(at + 1),
+          cost: routeCost,
+          total: routeTotal,
+        })
       }
+      todayRoutes.sort((left, right) => right.cost - left.cost || left.model.localeCompare(right.model))
       return {
         currency: spec.currency,
         total: sumBuckets(total, unattributedTiered),
@@ -669,7 +689,7 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
         unattributed: unattributedTiered,
         totalCost: totalCost + unattributedCost,
         unattributedCost,
-        today: { date: todayKey, cost: todayCost, total: todayTotal },
+        today: { date: todayKey, cost: todayCost, total: todayTotal, routes: todayRoutes },
         ...(spec.peakHours === undefined || spec.peakHours.length === 0 ? {} : {
           peakHours: spec.peakHours,
           timeZone: spec.timeZone,

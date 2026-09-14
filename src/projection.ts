@@ -7,6 +7,18 @@
 
 import type { TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 
+/** One route's usage and spend on a single billing day. */
+export interface ProviderTodayUsage {
+  /** Registered provider route key (`` for the unattributed bucket). */
+  provider: string
+  /** Provider-owned model id (`` for the unattributed bucket). */
+  model: string
+  /** Estimated spend of the day for this route. */
+  cost: number
+  /** Tokens billed on the day for this route. */
+  total: TokenUsageProjection
+}
+
 /**
  * Cumulative usage attributed to one provider/model route of a session log.
  *
@@ -86,6 +98,8 @@ export interface ContextUsageProjection {
     cost: number
     /** Tokens billed on the day. */
     total: TokenUsageProjection
+    /** Per-route breakdown of the day, sorted by descending cost. */
+    routes: readonly ProviderTodayUsage[]
   }
   /** Peak-hour windows used for tiering; absent means flat pricing. */
   peakHours?: readonly PeakHourRange[]

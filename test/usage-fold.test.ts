@@ -423,6 +423,16 @@ describe('per-day (today) spend', () => {
     })
     // TEST_PRICES deepseek-official: input 1, output 2 per 1M.
     expect(value.today.cost).toBeCloseTo((2000 * 1 + 200 * 2) / 1_000_000, 10)
+    // Per-model breakdown of the day (only the day's route, not the older one).
+    expect(value.today.routes).toHaveLength(1)
+    expect(value.today.routes[0]).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+    expect(value.today.routes[0]?.cost).toBeCloseTo((2000 * 1 + 200 * 2) / 1_000_000, 10)
+    expect(value.today.routes[0]?.total).toEqual({
+      uncachedInputTokens: 2000,
+      outputTokens: 200,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    })
     // The cumulative total still covers both days.
     expect(value.total).toEqual({
       uncachedInputTokens: 3000,
