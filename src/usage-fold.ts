@@ -234,7 +234,10 @@ export function createPricingSpec(config: {
   return {
     currency: config.currency ?? 'CNY',
     resolve: (provider, model) => resolver.resolve(provider, model),
-    priceUrl: (provider) => config.priceUrls?.[provider] ?? config.defaultPriceUrl,
+    // Only providers with an explicit priceUrls entry get a link: falling
+    // back to defaultPriceUrl would tag unrelated routes (e.g. a gateway
+    // provider) with DeepSeek's pricing page.
+    priceUrl: (provider) => config.priceUrls?.[provider],
     isPeakHour: (timeMs) => isPeakHour(timeMs, peakHours, timeZone),
     now: () => Date.now(),
     ...(peakHours.length === 0 ? {} : { peakHours, timeZone }),

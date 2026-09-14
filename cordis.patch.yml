@@ -25,10 +25,12 @@
 #   Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp still call
 #   through but are served by V4.1-Flash and bill at the Flash rates.
 #
-# priceUrls is display metadata only: the official pricing page link shown
-# next to each provider (no pricing API exists for DeepSeek; OpenRouter is
-# the notable exception). Update the numbers here or in Settings when the
-# provider changes its rates.
+# priceUrls is display metadata only: a pricing-page link is shown ONLY for
+# providers listed there (no pricing API exists for DeepSeek; OpenRouter is
+# the notable exception). defaultPriceUrl is the reference page of the
+# fallback rate and is deliberately NOT attached to unlisted providers, so a
+# gateway route (e.g. conntek) never renders DeepSeek's page as its own.
+# Update the numbers here or in Settings when the provider changes its rates.
 #
 # Install: `dsh plugin --profile <name> add <this package>` (npm or a local
 # path). The `dsh plugin` command pnpm-installs the package into the profile

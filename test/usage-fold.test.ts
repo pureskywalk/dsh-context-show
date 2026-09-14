@@ -348,6 +348,22 @@ describe('contextUsage fold', () => {
     expect(value.peakHours).toBeUndefined()
   })
 
+  it('never attaches the default pricing page to an unlisted provider', () => {
+    seq.value = 0
+    const spec = createPricingSpec({
+      currency: 'CNY',
+      prices: { conntek: { inputPerM: 1, cacheReadPerM: 0.02, cacheWritePerM: 1, outputPerM: 4 } },
+      defaultPriceUrl: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
+    })
+    const definition = createContextUsageProjectionDefinition(spec)
+    let state = definition.init()
+    state = definition.apply(state, header('conntek', 'gateway-model') as SessionEvent)
+    state = definition.apply(state, messageUsage(1, 1, 100, 10) as SessionEvent)
+    const value = definition.wire.view(state as ContextUsageState)
+    expect(value.providers[0]?.provider).toBe('conntek')
+    expect(value.providers[0]?.priceUrl).toBeUndefined()
+  })
+
   it('prices at the shipped flat default when no config is supplied', () => {
     seq.value = 0
     const spec = createPricingSpec({})
