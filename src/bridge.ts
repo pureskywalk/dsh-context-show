@@ -17,6 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { SettingsNamespace, SettingsPathOp, SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
+import type { SpendSnapshot } from './spend-protocol.ts'
 import {
   CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX,
   type BridgeDescribeResult,
@@ -121,6 +122,8 @@ export interface BridgeDeps {
   settings: SettingsProvider
   /** The llm catalog seam for auto-detected provider/model routes. */
   llm: LlmCatalogFace
+  /** On-demand cross-Session "today" spend snapshot. */
+  spend: () => SpendSnapshot
 }
 
 /**
@@ -129,7 +132,7 @@ export interface BridgeDeps {
  * @returns the exact-path route registrations.
  */
 export function makeBridgeRoutes(deps: BridgeDeps): WebRoute[] {
-  const { settings, llm } = deps
+  const { settings, llm, spend } = deps
   const namespace = BRIDGE_NAMESPACE as SettingsNamespace
   const describe = (): BridgeDescribeResult => {
     const descriptor = settings.describe({ redactSecrets: true }).find(candidate => String(candidate.ns) === BRIDGE_NAMESPACE)
@@ -221,6 +224,18 @@ export function makeBridgeRoutes(deps: BridgeDeps): WebRoute[] {
       handler: async (req, res) => {
         if (!guard(req, res)) return
         writeJson(res, 200, await models())
+      },
+    },
+    {
+      kind: 'exact',
+      path: CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX + '/spend',
+      handler: async (req, res) => {
+        if (!guard(req, res)) return
+        try {
+          writeJson(res, 200, { ok: true, value: spend() })
+        } catch (error) {
+          writeJson(res, 200, { ok: false, code: 'internal', message: error instanceof Error ? error.message : String(error) })
+        }
       },
     },
   ]

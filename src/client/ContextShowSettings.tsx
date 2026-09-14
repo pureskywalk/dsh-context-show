@@ -8,13 +8,14 @@
  * @module dsh-context-show/ContextShowSettings
  */
 
-import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the ui-settings-plugins SlotMap merge (settings.plugin.item
 // seat, declared at runtime by the configurable tab).
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX, type BridgeModelsResult } from '../bridge-protocol.ts'
+import { formatPriceInput, parsePriceInput } from './price-input.ts'
 import type { ContextShowKey } from './locales.ts'
 import styles from './ContextShowSettings.module.css'
 
@@ -122,7 +123,32 @@ const PriceFieldsEditor = memo(function PriceFieldsEditor({
   onField: (field: PriceFieldKey, peak: boolean, next: string) => void
   t: (key: ContextShowKey, params?: Record<string, unknown>) => string
 }) {
-  const numberValue = (current: number): string => (Number.isFinite(current) ? String(current) : '')
+  // Raw text of every cell being edited: a controlled number input would
+  // re-normalise "0." to 0 and swallow the decimal point mid-typing.
+  const [editing, setEditing] = useState<Record<string, string>>({})
+  const cellKey = (field: { key: PriceFieldKey }, peak: boolean): string => field.key + (peak ? ':peak' : ':base')
+  const bind = (field: { key: PriceFieldKey }, peak: boolean, id: string, current: number) => ({
+    type: 'text' as const,
+    inputMode: 'decimal' as const,
+    autoComplete: 'off' as const,
+    spellCheck: false,
+    id,
+    name: id,
+    className: styles.numberInput,
+    value: editing[cellKey(field, peak)] ?? formatPriceInput(current),
+    onChange: (event: ChangeEvent<HTMLInputElement>): void => {
+      const raw = event.target.value
+      setEditing((prev) => ({ ...prev, [cellKey(field, peak)]: raw }))
+      onField(field.key, peak, raw)
+    },
+    onBlur: (): void => {
+      setEditing((prev) => {
+        const next = { ...prev }
+        delete next[cellKey(field, peak)]
+        return next
+      })
+    },
+  })
   return (
     <table className={styles.priceTable}>
       <thead>
@@ -140,29 +166,11 @@ const PriceFieldsEditor = memo(function PriceFieldsEditor({
           <tr key={field.key}>
             <td className={styles.priceFieldCell}>{t(field.label)}</td>
             <td className={styles.priceValueCell}>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                id={offPeakId}
-                name={offPeakId}
-                className={styles.numberInput}
-                value={numberValue(value[field.key])}
-                onChange={(event) => { onField(field.key, false, event.target.value) }}
-              />
+              <input {...bind(field, false, offPeakId, value[field.key])} />
             </td>
             {showPeak && (
               <td className={styles.priceValueCell}>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  id={peakId}
-                  name={peakId}
-                  className={styles.numberInput}
-                  value={numberValue(value.peak?.[field.key] ?? 0)}
-                  onChange={(event) => { onField(field.key, true, event.target.value) }}
-                />
+                <input {...bind(field, true, peakId, value.peak?.[field.key] ?? 0)} />
               </td>
             )}
           </tr>
@@ -268,7 +276,10 @@ export const ContextShowSettings = memo(function ContextShowSettings(props: Cont
     peak: boolean,
     raw: string,
   ): void => {
-    const numeric = raw === '' ? 0 : Number(raw)
+    // Half-typed text ("0.") and invalid input keep the previous value; the
+    // cell renders the raw draft until blur, so nothing is lost visually.
+    const numeric = parsePriceInput(raw)
+    if (numeric === undefined) return
     setDraft((prev) => {
       if (prev === null) return prev
       const target = record === 'defaultPrice'

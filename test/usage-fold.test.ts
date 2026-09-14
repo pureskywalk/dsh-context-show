@@ -64,11 +64,11 @@ const seq = { value: 0 }
 const nextSeq = (): number => seq.value++
 const TIME = { offPeak: 500, peak: 2000 }
 
-function header(provider: string, model: string): SessionEvent {
+function header(provider: string, model: string, time: number = TIME.offPeak): SessionEvent {
   return {
     type: 'request/header',
     seq: nextSeq(),
-    time: TIME.offPeak,
+    time,
     data: {
       reason: 'initial',
       header: { config: { provider, model } },
@@ -76,11 +76,11 @@ function header(provider: string, model: string): SessionEvent {
   } as SessionEvent
 }
 
-function context(provider: string, model: string): SessionEvent {
+function context(provider: string, model: string, time: number = TIME.offPeak): SessionEvent {
   return {
     type: 'request/context',
     seq: nextSeq(),
-    time: TIME.offPeak,
+    time,
     data: { provider, model, contextWindow: 64000 },
   } as SessionEvent
 }
@@ -234,6 +234,8 @@ describe('contextUsage fold', () => {
     const value = foldAll([
       header('deepseek-official', 'deepseek-v4-flash'),
       messageUsage(1, 1, 1000, 100, { time: TIME.offPeak }), // base: 0.001 + 0.0002
+      // A new request inside the peak window prices its own settlement.
+      context('deepseek-official', 'deepseek-v4-flash', TIME.peak),
       messageUsage(1, 2, 1000, 100, { time: TIME.peak }),   // peak: 0.002 + 0.0004
     ], tieredSpec())
     expect(value.providers[0]?.cost).toBeCloseTo(0.0012 + 0.0024, 10)
@@ -242,19 +244,19 @@ describe('contextUsage fold', () => {
     expect(value.timeZone).toBe('UTC')
   })
 
-  it('replaces a same-step sample across a tier boundary without double counting', () => {
+  it('replaces a repeated same-step sample without double counting', () => {
     seq.value = 0
     const value = foldAll([
       header('deepseek-official', 'deepseek-v4-flash'),
-      // abandoned attempt at off-peak time, final message at peak time — same step
+      // An abandoned attempt and the settled message of the SAME request: one
+      // step is billed once, at that request's tier.
       assistantAttempt(1, 1, 1000, 100, { time: TIME.offPeak }),
-      messageUsage(1, 1, 1000, 100, { time: TIME.peak }),
+      messageUsage(1, 1, 1000, 100, { time: TIME.offPeak }),
       messageUsage(1, 2, 500, 50, { time: TIME.offPeak }),
     ], tieredSpec())
     expect(value.providers[0]).toMatchObject({ uncachedInputTokens: 1500, outputTokens: 150, steps: 2 })
-    // step 1 billed at peak rate only (attempt replaced), step 2 at base
-    expect(value.providers[0]?.cost).toBeCloseTo((0.002 + 0.0004) + (0.0005 + 0.0001), 10)
-    expect(value.totalCost).toBeCloseTo(0.003, 10)
+    expect(value.providers[0]?.cost).toBeCloseTo((0.001 + 0.0002) + (0.0005 + 0.0001), 10)
+    expect(value.totalCost).toBeCloseTo(0.0018, 10)
   })
 
   it('adds a retried attempt instead of replacing the abandoned one', () => {
@@ -263,6 +265,7 @@ describe('contextUsage fold', () => {
       header('deepseek-official', 'deepseek-v4-flash'),
       assistantAttempt(1, 1, 1000, 100, { time: TIME.offPeak }),
       retryStarted(1, 1),
+      context('deepseek-official', 'deepseek-v4-flash', TIME.peak),
       assistantAttempt(1, 1, 1000, 100, { time: TIME.peak }),
     ], tieredSpec())
     // Without retry-started the second sample would replace (peak only); with
@@ -410,8 +413,9 @@ describe('per-day (today) spend', () => {
   it('reports only the current billing day', () => {
     seq.value = 0
     const value = foldAll([
-      header('deepseek-official', 'deepseek-v4-flash'),
+      header('deepseek-official', 'deepseek-v4-flash', DAY_A),
       messageUsage(1, 1, 1000, 100, { time: DAY_A }),
+      context('deepseek-official', 'deepseek-v4-flash', DAY_B),
       messageUsage(2, 1, 2000, 200, { time: DAY_B }),
     ], specWithNow())
     expect(value.today.date).toBe('2026-09-14')
@@ -442,20 +446,24 @@ describe('per-day (today) spend', () => {
     })
   })
 
-  it('moves a same-step replacement out of the day it replaced', () => {
+  it('attributes a retried cross-day attempt to its own day', () => {
     seq.value = 0
     const value = foldAll([
-      header('deepseek-official', 'deepseek-v4-flash'),
-      messageUsage(1, 1, 1000, 100, { time: DAY_A }),
-      messageUsage(1, 1, 3000, 300, { time: DAY_B }),
+      header('deepseek-official', 'deepseek-v4-flash', DAY_A),
+      assistantAttempt(1, 1, 1000, 100, { time: DAY_A }),
+      retryStarted(1, 1),
+      // The retry is a new request the next day: it adds, on that day.
+      context('deepseek-official', 'deepseek-v4-flash', DAY_B),
+      assistantAttempt(1, 1, 3000, 300, { time: DAY_B }),
     ], specWithNow())
-    expect(value.providers[0]?.steps).toBe(1)
+    expect(value.providers[0]?.steps).toBe(2)
     expect(value.total).toEqual({
-      uncachedInputTokens: 3000,
-      outputTokens: 300,
+      uncachedInputTokens: 4000,
+      outputTokens: 400,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
     })
+    expect(value.today.date).toBe('2026-09-14')
     expect(value.today.total).toEqual({
       uncachedInputTokens: 3000,
       outputTokens: 300,

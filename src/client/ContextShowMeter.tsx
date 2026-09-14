@@ -31,6 +31,8 @@ import type { ContextBreakdownProjection, ContextPressureProjection, TokenUsageP
 // Type-only: pulls the contextUsage projection key into the client program.
 import type {} from '../projection.ts'
 import type { ContextUsageProjection } from '../projection.ts'
+import { CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX } from '../bridge-protocol.ts'
+import type { BridgeSpendResult, SpendSnapshot } from '../spend-protocol.ts'
 import { toolUsage } from './estimate.ts'
 import { billedInputTokens, cacheHitPercent, formatMoney, formatTokens, totalTokensOf } from './formats.ts'
 import type { ContextShowKey } from './locales.ts'
@@ -113,6 +115,19 @@ function todayOf(summary: unknown): { cost: number; routes: readonly TodayRouteR
   return { cost: today.cost, routes }
 }
 
+/**
+ * Read one Session list entry's cached cumulative `contextUsage.totalCost`.
+ * @param summary - one `SessionListState` entry (or anything).
+ * @returns the cached cumulative spend, or undefined when absent.
+ */
+function totalCostOf(summary: unknown): number | undefined {
+  const values = (summary as { projections?: { values?: Record<string, unknown> } })?.projections?.values
+  const value = values?.['contextUsage']
+  if (typeof value !== 'object' || value === null) return undefined
+  const cost = (value as { totalCost?: unknown }).totalCost
+  return typeof cost === 'number' && Number.isFinite(cost) ? cost : undefined
+}
+
 /** Clamp a dragged coordinate so most of the panel stays on screen. */
 function clampDrag(value: number, limit: number): number {
   return Math.min(Math.max(value, DRAG_MARGIN), limit - DRAG_MARGIN - DRAG_MIN_VISIBLE)
@@ -133,6 +148,8 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
   const [open, setOpen] = useState(false)
   const [detail, setDetail] = useState(false)
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  // Host-folded cross-Session spend (loopback bridge); undefined on remote browsers.
+  const [remoteSpend, setRemoteSpend] = useState<SpendSnapshot | undefined>(undefined)
   const rootRef = useRef<HTMLSpanElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
@@ -259,6 +276,92 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
     return { total, workspace, all: sortRows(allRoutes), workspaceRows: sortRows(workspaceRoutes) }
   }, [sessionsById, sessionId, providerUsage])
 
+  // This workspace's cumulative spend: the live value for this Session plus
+  // the cached cumulative value of every Session sharing its working directory.
+  const workspaceSpend = useMemo(() => {
+    const currentCwd = sessionsById[sessionId]?.cwd
+    if (currentCwd === undefined) return undefined
+    let total = 0
+    let seen = false
+    for (const [id, summary] of Object.entries(sessionsById)) {
+      if (summary.cwd !== currentCwd) continue
+      const cost = id === sessionId ? providerUsage?.totalCost : totalCostOf(summary)
+      if (cost === undefined) continue
+      total += cost
+      seen = true
+    }
+    return seen ? total : undefined
+  }, [sessionsById, sessionId, providerUsage])
+
+  // Pull the host's cross-Session snapshot while the panel is open; it is the
+  // authority for the today figures (the client fold above is the fallback
+  // for remote browsers, which cannot reach the loopback bridge).
+  const todayCostSignal = providerUsage?.today?.cost ?? 0
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const load = async (): Promise<void> => {
+      try {
+        const http = await fetch(CONTEXT_SHOW_SETTINGS_BRIDGE_PREFIX + '/spend', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        })
+        if (!http.ok) {
+          console.warn('[context-show] spend bridge HTTP ' + String(http.status))
+          return
+        }
+        const body = await http.json() as BridgeSpendResult
+        if (cancelled) return
+        if (body.ok === true) setRemoteSpend(body.value)
+        else console.warn('[context-show] spend bridge refused: ' + body.code + ' ' + body.message)
+      } catch (error) {
+        // Bridge unreachable (non-loopback browser): keep the local fallback.
+        console.warn('[context-show] spend bridge unavailable; using the local estimate', error)
+      }
+    }
+    void load()
+    const timer = setInterval(() => { void load() }, 30_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [open, sessionId, todayCostSignal])
+
+  // Effective today figures: the host snapshot when available, else the fold.
+  const today = useMemo(() => {
+    if (remoteSpend === undefined) {
+      return {
+        date: undefined,
+        total: todaySpend.total,
+        totalRoutes: todaySpend.all,
+        workspace: todaySpend.workspace,
+        workspaceRoutes: todaySpend.workspaceRows,
+      }
+    }
+    const currentCwd = sessionsById[sessionId]?.cwd
+    const scope = currentCwd === undefined
+      ? undefined
+      : remoteSpend.workspaces.find(candidate => candidate.cwd === currentCwd)
+    return {
+      date: remoteSpend.date,
+      total: remoteSpend.total.cost,
+      totalRoutes: remoteSpend.total.routes,
+      // Without a resolved cwd, fall back to this Session's live today value.
+      workspace: currentCwd === undefined ? providerUsage?.today?.cost ?? 0 : scope?.cost ?? 0,
+      workspaceRoutes: currentCwd === undefined ? providerUsage?.today?.routes ?? [] : scope?.routes ?? [],
+    }
+  }, [remoteSpend, sessionsById, sessionId, todaySpend])
+
+  // Headline "workspace spend": prefer the host snapshot (it covers every live
+  // Session); the client fold remains the fallback for remote browsers.
+  const workspaceSpendHost = useMemo(() => {
+    if (remoteSpend === undefined) return undefined
+    const currentCwd = sessionsById[sessionId]?.cwd
+    if (currentCwd === undefined) return remoteSpend.cumulativeTotal
+    return remoteSpend.workspaces.find(scope => scope.cwd === currentCwd)?.cumulative
+  }, [remoteSpend, sessionsById, sessionId])
+
   /** One indented row per model inside a today range. */
   const todayRouteRows = (rows: readonly TodayRouteRow[], keyPrefix: string): ReactNode =>
     rows.map((route, index) => (
@@ -360,7 +463,12 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
                 : usageTotal > 0 ? t('context.usageTotal', { total: formatTokens(usageTotal) }) : '—'}
             </span>
             {hasProviderRows && providerUsage !== undefined && (
-              <span className={styles.costInline}>{formatMoney(totalCost, providerUsage.currency)}</span>
+              <span className={styles.costInline}>
+                {(workspaceSpendHost ?? workspaceSpend) !== undefined && (
+                  <span className={styles.costLabel}>{t('context.workspaceSpendLabel')}</span>
+                )}
+                {formatMoney(workspaceSpendHost ?? workspaceSpend ?? totalCost, providerUsage.currency)}
+              </span>
             )}
           </div>
 
@@ -370,14 +478,12 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
                 <dl className={styles.rows}>
                   <div className={styles.row}>
                     <dt>{t('context.todayWorkspace')}</dt>
-                    <dd>{formatMoney(todaySpend.workspace, currency)}</dd>
+                    <dd>{formatMoney(today.workspace, currency)}</dd>
                   </div>
-                  {todayRouteRows(todaySpend.workspaceRows, 'cw')}
                   <div className={styles.row}>
                     <dt>{t('context.todayTotal')}</dt>
-                    <dd>{formatMoney(todaySpend.total, currency)}</dd>
+                    <dd>{formatMoney(today.total, currency)}</dd>
                   </div>
-                  {todayRouteRows(todaySpend.all, 'ca')}
                 </dl>
               )}
               {!anyData && <p className={styles.empty}>{t('context.noUsage')}</p>}
@@ -497,14 +603,14 @@ export const ContextShowMeter = memo(function ContextShowMeter(props: ContextSho
                   <dl className={styles.rows}>
                     <div className={styles.row}>
                       <dt>{t('context.todayWorkspace')}</dt>
-                      <dd>{formatMoney(todaySpend.workspace, currency)}</dd>
+                      <dd>{formatMoney(today.workspace, currency)}</dd>
                     </div>
-                    {todayRouteRows(todaySpend.workspaceRows, 'dw')}
+                    {todayRouteRows(today.workspaceRoutes, 'dw')}
                     <div className={styles.row}>
                       <dt>{t('context.todayTotal')}</dt>
-                      <dd>{formatMoney(todaySpend.total, currency)}</dd>
+                      <dd>{formatMoney(today.total, currency)}</dd>
                     </div>
-                    {todayRouteRows(todaySpend.all, 'da')}
+                    {todayRouteRows(today.totalRoutes, 'da')}
                   </dl>
                 </>
               )}

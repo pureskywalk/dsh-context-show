@@ -18,13 +18,19 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import z from '@deepseek-ai/schemastery'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { makeBridgeRoutes } from './bridge.ts'
+import { createSpendCollector } from './spend.ts'
+import { createLedger, readLedgerFile, writeLedgerFile } from './spend-ledger.ts'
+import type { ContextUsageProjection } from './projection.ts'
 import {
   createContextUsageProjectionDefinition,
   createPricingSpec,
+  dayKeyOf,
   DEFAULT_PEAK_HOURS,
   DEFAULT_PRICE,
   type PeakHourRange,
@@ -144,6 +150,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   // Settings page serves the namespace, the composition entry otherwise
   // (installSection swaps it on attach and detach).
   let current: () => Config = () => config ?? {}
+  let liveSpec = createPricingSpec(config ?? {})
   let disposeProjection: (() => void) | undefined
 
   const rebuild = (): void => {
@@ -151,8 +158,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       disposeProjection()
       disposeProjection = undefined
     }
-    const spec = createPricingSpec(current())
-    disposeProjection = ctx.sessionProjections.register(createContextUsageProjectionDefinition(spec))
+    liveSpec = createPricingSpec(current())
+    disposeProjection = ctx.sessionProjections.register(createContextUsageProjectionDefinition(liveSpec))
   }
 
   // The settings provider registers the namespace with the composition entry
@@ -170,9 +177,35 @@ export function apply(ctx: Context, config: Config = {}): void {
   // boundary, so the pricing form is re-served through a loopback-only bridge
   // over the host settings seam. On hosts whose apiproxy already exposes the
   // namespace this stays dormant (the client keeps the official scope primary).
-  ctx.inject(['settings', 'webServer', 'llm'], (bridgeCtx) => {
+  // Durable spend ledger: remembers every Session's last observed day, so a
+  // restart cannot shrink "today / all sessions" to the Sessions it loaded.
+  const ledgerPath = dshHomePath('storages', 'dsh-context-show', 'spend-ledger.json')
+  const ledger = createLedger((doc) => writeLedgerFile(ledgerPath, doc))
+  void readLedgerFile(ledgerPath).then((doc) => { ledger.hydrate(doc) })
+  ctx.effect(() => () => { void ledger.flush() }, 'context-show: spend ledger flush')
+  // Record observations even while the panel is closed (the bridge folds only
+  // on demand).
+  ctx.effect(() => ctx.sessionProjections.onChanged((session, key, value) => {
+    if (key !== 'contextUsage') return
+    const view = value as ContextUsageProjection | undefined
+    ledger.observe(String(session.header.id), {
+      cwd: session.header.cwd,
+      today: view?.today,
+      cumulative: view?.totalCost,
+    }, dayKeyOf(liveSpec.now?.() ?? Date.now(), liveSpec.timeZone))
+  }), 'context-show: spend ledger observations')
+
+  ctx.inject(['settings', 'webServer', 'llm', 'sessions'], (bridgeCtx) => {
+    // Cross-Session "today" spend is folded host-side over the ledger, so the
+    // panel never depends on the browser's Session list caches.
+    const spend = createSpendCollector({
+      listSessions: () => bridgeCtx.sessions.list(),
+      readContextUsage: (session) => bridgeCtx.sessionProjections.snapshot(session, ['contextUsage']).values['contextUsage'] as ContextUsageProjection | undefined,
+      spec: () => liveSpec,
+      ledger,
+    })
     bridgeCtx.effect(() => {
-      const disposers = makeBridgeRoutes({ settings: bridgeCtx.settings, llm: bridgeCtx.llm }).map(route => bridgeCtx.webServer.register(route))
+      const disposers = makeBridgeRoutes({ settings: bridgeCtx.settings, llm: bridgeCtx.llm, spend }).map(route => bridgeCtx.webServer.register(route))
       return () => {
         for (const dispose of disposers) dispose()
       }

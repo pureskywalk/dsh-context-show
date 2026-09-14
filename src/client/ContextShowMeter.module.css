@@ -161,6 +161,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--dsw-alias-label-primary);
@@ -168,9 +169,22 @@
 
 .costInline {
   flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
   color: var(--dsw-alias-label-primary);
+}
+
+/* Explanatory label in front of the headline amount ("workspace spend"):
+   same size as the figure, demoted by colour instead of scale. */
+.costLabel {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .bar {
@@ -214,15 +228,15 @@
 }
 
 .rows {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
 }
 
 .row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 2px 0;
+  padding: 3px 0;
 }
 
 .row dt {
@@ -235,19 +249,25 @@
 .row dd {
   flex: none;
   margin: 0;
+  font-size: 12px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Today breakdown: one indented row per model under a today range. */
 .todayRouteRow {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 1px 0 1px 14px;
-  font-size: 0.92em;
+  padding: 2px 0 2px 14px;
+  font-size: 12px;
   color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+}
+
+.todayRouteRow dd {
+  font-weight: 500;
 }
 
 .todayRouteRow dt {

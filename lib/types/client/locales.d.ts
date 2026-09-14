@@ -23,6 +23,7 @@ export declare const zh: {
     'context.priceNote': string;
     'context.officialPrice': string;
     'context.officialPriceFor': string;
+    'context.workspaceSpendLabel': string;
     'context.todayWorkspace': string;
     'context.todayTotal': string;
     'context.tokens': string;
@@ -96,6 +97,7 @@ export declare const en: {
     'context.priceNote': string;
     'context.officialPrice': string;
     'context.officialPriceFor': string;
+    'context.workspaceSpendLabel': string;
     'context.todayWorkspace': string;
     'context.todayTotal': string;
     'context.tokens': string;

@@ -14,6 +14,7 @@
  */
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver';
 import type { SettingsProvider } from '@deepseek-ai/dsh-settings';
+import type { SpendSnapshot } from './spend-protocol.ts';
 /** Minimal llm-catalog face the bridge needs (satisfied by ctx.llm). */
 export interface LlmCatalogFace {
     listProviders(): readonly {
@@ -30,6 +31,8 @@ export interface BridgeDeps {
     settings: SettingsProvider;
     /** The llm catalog seam for auto-detected provider/model routes. */
     llm: LlmCatalogFace;
+    /** On-demand cross-Session "today" spend snapshot. */
+    spend: () => SpendSnapshot;
 }
 /**
  * Build the loopback-only bridge routes.

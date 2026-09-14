@@ -321,6 +321,14 @@ export interface ContextUsageState {
   /** Last unattributed sample, for same-step replacement. */
   unattributedLast: UsageSample | null
   /**
+   * Length of a fork / continuation-inherited event prefix. Events below it
+   * were produced (and billed) by the ancestor Session, so this fold skips
+   * them; counting them would double bill the cross-Session totals.
+   */
+  inheritedCount: number
+  /** Time of the request in force (the latest route record), when known. */
+  requestTime: number | undefined
+  /**
    * Same samples keyed by billing day, so the panel can report "today"
    * without replaying: day → route key → tiered buckets. Same-step
    * replacement subtracts from the day the replaced sample landed on.
@@ -386,6 +394,8 @@ const contextUsageStateSchema = z.object({
   unattributed: tierBucketsSchema,
   unattributedLast: usageSampleSchema.nullable(),
   days: z.record(z.string(), z.record(z.string(), tierBucketsSchema)),
+  inheritedCount: z.number().int().nonnegative(),
+  requestTime: z.number().optional(),
 }).strict() as unknown as z.ZodType<ContextUsageState>
 
 const contextUsageSchema = z.object({
@@ -600,24 +610,29 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
   return {
     key: 'contextUsage',
     stateSchema: contextUsageStateSchema,
-    init: () => ({
+    init: (_header?: unknown, inheritedEventCount?: unknown) => ({
       route: undefined,
       providers: {},
       order: [],
       unattributed: zeroTierBuckets(),
       unattributedLast: null,
       days: {},
+      inheritedCount: Number(inheritedEventCount ?? 0) || 0,
+      requestTime: undefined,
     }),
     apply: (state, event) => {
+      // Everything inside a fork / continuation-inherited prefix was already
+      // produced and billed by the ancestor Session.
+      if (Number(event.seq) < state.inheritedCount) return state
       if (event.type === 'request/context') {
         const { provider, model } = event.data
-        if (state.route?.provider === provider && state.route.model === model) return state
-        return { ...state, route: { provider, model } }
+        if (state.route?.provider === provider && state.route.model === model) return { ...state, requestTime: event.time }
+        return { ...state, route: { provider, model }, requestTime: event.time }
       }
       if (event.type === 'request/header') {
         const { provider, model } = event.data.header.config
-        if (state.route?.provider === provider && state.route.model === model) return state
-        return { ...state, route: { provider, model } }
+        if (state.route?.provider === provider && state.route.model === model) return { ...state, requestTime: event.time }
+        return { ...state, route: { provider, model }, requestTime: event.time }
       }
       if (event.type === 'llm/retry-started') {
         return closeStep(state, event.data.turn, event.data.step)
@@ -629,7 +644,10 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
       const usage = usageOf(event)
       if (usage === undefined) return state
       const { turn, step } = event.data
-      return attribute(state, turn, step, usage, spec.isPeakHour(event.time), dayKeyOf(event.time, spec.timeZone))
+      // Providers price the request, not its settlement: billing a settlement
+      // that straddles a tier boundary at the later instant would flip tiers.
+      const billedAt = state.requestTime ?? event.time
+      return attribute(state, turn, step, usage, spec.isPeakHour(billedAt), dayKeyOf(billedAt, spec.timeZone))
     },
     wire: {
       viewSchema: contextUsageSchema,
@@ -697,8 +715,9 @@ export function createContextUsageProjectionDefinition(spec: PricingSpec) {
         }
       },
     },
-    // 3: settlement-stream usage (0.1.3-alpha.1). 4: per-day buckets for the
-    // "today" spend figures, so any persisted cache must rebuild.
-    stateVersion: 4,
+    // 3: settlement-stream usage (0.1.3-alpha.1). 4: per-day buckets. 5: skip
+    // fork-inherited prefixes and bill at the request time, so cached states
+    // from the older cost semantics must rebuild.
+    stateVersion: 5,
   } satisfies ProjectionDefinition<'contextUsage', ContextUsageState>
 }

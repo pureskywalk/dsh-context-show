@@ -178,6 +178,14 @@ export interface ContextUsageState {
     /** Last unattributed sample, for same-step replacement. */
     unattributedLast: UsageSample | null;
     /**
+     * Length of a fork / continuation-inherited event prefix. Events below it
+     * were produced (and billed) by the ancestor Session, so this fold skips
+     * them; counting them would double bill the cross-Session totals.
+     */
+    inheritedCount: number;
+    /** Time of the request in force (the latest route record), when known. */
+    requestTime: number | undefined;
+    /**
      * Same samples keyed by billing day, so the panel can report "today"
      * without replaying: day → route key → tiered buckets. Same-step
      * replacement subtracts from the day the replaced sample landed on.
@@ -203,13 +211,15 @@ export declare function dayKeyOf(timeMs: number, timeZone?: string): string;
 export declare function createContextUsageProjectionDefinition(spec: PricingSpec): {
     key: "contextUsage";
     stateSchema: z.ZodType<ContextUsageState, unknown, z.core.$ZodTypeInternals<ContextUsageState, unknown>>;
-    init: () => {
+    init: (_header?: unknown, inheritedEventCount?: unknown) => {
         route: undefined;
         providers: {};
         order: never[];
         unattributed: TierBuckets;
         unattributedLast: null;
         days: {};
+        inheritedCount: number;
+        requestTime: undefined;
     };
     apply: (state: NoInfer<ContextUsageState>, event: SessionEvent) => ContextUsageState;
     wire: {
