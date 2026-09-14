@@ -2,7 +2,7 @@
 
 实时上下文占用面板（DSH Web 客户端插件 + 主机投影插件）。
 
-> **当前对齐 DeepSeek Harness `0.1.3-alpha.1`**：`contextUsage` 会话投影按新版 API 注册为 `stateSchema`（折叠态校验）+ `wire`（客户端可见视图）；用量取数改自 durable 结算事件（`assistant/message` / `assistant/attempt` 的 `usage` 或内嵌 stream），与 token-meter 0.1.3 对齐。`0.1.1-rc.2` 及更早宿主缺少这些事件词汇，无法显示本插件的金额与用量，请升级宿主。
+> **当前对齐 DeepSeek Harness `0.1.5-rc.2`**：`contextUsage` 会话投影按新版 API 注册为 `stateSchema`（折叠态校验）+ `wire`（客户端可见视图）；用量取数自 durable 结算事件（`assistant/message` / `assistant/attempt` 的 `usage`，否则取内嵌 stream 的最后一个 usage chunk，用官方 `lastAssistantStreamChunk` helper）。`0.1.3-alpha.1` 起 npm 未发布对应版本，插件依赖宿主提供；`0.1.1-rc.2` 及更早宿主缺少这些事件词汇，无法显示本插件的金额与用量，请升级宿主。
 
 在会话头部右侧添加一个占用指示按钮（圆环 + 百分比），点击展开/收起**可拖动的面板**，实时展示：
 
@@ -36,11 +36,14 @@
 
 | 模型 | 时段 | 缓存命中 | 缓存未命中 | 输出 |
 | --- | --- | --- | --- | --- |
-| deepseek-v4-flash | 闲时 | ¥0.05 | ¥1.5 | ¥4.5 |
-| deepseek-v4-flash | 高峰 | ¥0.10 | ¥3.0 | ¥9.0 |
+| deepseek-flash（V4.1-Flash） | 闲时 | ¥0.02 | ¥1 | ¥4 |
+| deepseek-flash（V4.1-Flash） | 高峰 | ¥0.04 | ¥2 | ¥8 |
 | deepseek-v4-pro | 闲时 | ¥0.15 | ¥4.5 | ¥13.5 |
 | deepseek-v4-pro | 高峰 | ¥0.30 | ¥9.0 | ¥27.0 |
-| deepseek-v4-flash-vision-exp | 同 flash | ¥0.05/0.10 | ¥1.5/3.0 | ¥4.5/9.0 |
+| deepseek-v4-flash / deepseek-v4-flash-vision-exp（旧名，按 Flash 计费） | 闲时 | ¥0.02 | ¥1 | ¥4 |
+| deepseek-v4-flash / deepseek-v4-flash-vision-exp（旧名，按 Flash 计费） | 高峰 | ¥0.04 | ¥2 | ¥8 |
+
+> 2026-09 起 DeepSeek 调整了 Flash 档价格（缓存命中/未命中/输出全面下调，Pro 档未变），模型主名改为 `deepseek-flash`；旧名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 仍可调用并按 Flash 价计费。缓存写入按缓存未命中价计。
 
 本插件默认已启用峰谷计价（`peakHours: 9–12 / 14–18`，`timeZone: Asia/Shanghai`，且**周末自动按闲时**），并预置上述闲时/高峰两套价格（`base` = 闲时，`peak` = 高峰）。价格后续调整直接在设置页改数字即可；若想改回平价，在设置页关闭「启用峰谷计价」或把 `peakHours` 清空。
 

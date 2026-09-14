@@ -16,11 +16,14 @@
 # https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ :
 #   Off-peak = half of peak. Peak hours (Beijing, MON-FRI only):
 #   9:00-12:00, 14:00-18:00; weekends are all off-peak.
-#   deepseek-v4-flash:       cache hit 0.05 / cache miss 1.5 / output 4.5 (off-peak)
-#                            cache hit 0.10 / cache miss 3.0 / output 9.0 (peak)
-#   deepseek-v4-pro:         cache hit 0.15 / cache miss 4.5 / output 13.5 (off-peak)
+#   deepseek-flash (V4.1-Flash):
+#                            cache hit 0.02 / cache miss 1 / output 4 (off-peak)
+#                            cache hit 0.04 / cache miss 2 / output 8 (peak)
+#   deepseek-v4-pro (V4-Pro-0813):
+#                            cache hit 0.15 / cache miss 4.5 / output 13.5 (off-peak)
 #                            cache hit 0.30 / cache miss 9.0 / output 27.0 (peak)
-#   deepseek-v4-flash-vision-exp: same as deepseek-v4-flash
+#   Legacy names deepseek-v4-flash / deepseek-v4-flash-vision-exp still call
+#   through but are served by V4.1-Flash and bill at the Flash rates.
 #
 # priceUrls is display metadata only: the official pricing page link shown
 # next to each provider (no pricing API exists for DeepSeek; OpenRouter is
@@ -44,17 +47,47 @@
         # Provider-keyed prices; base = off-peak, peak = peak-hour overrides.
         prices:
           deepseek-official:
-            inputPerM: 1.5
-            cacheReadPerM: 0.05
-            cacheWritePerM: 1.5
-            outputPerM: 4.5
+            inputPerM: 1
+            cacheReadPerM: 0.02
+            cacheWritePerM: 1
+            outputPerM: 4
             peak:
-              inputPerM: 3
-              cacheReadPerM: 0.1
-              cacheWritePerM: 3
-              outputPerM: 9
+              inputPerM: 2
+              cacheReadPerM: 0.04
+              cacheWritePerM: 2
+              outputPerM: 8
         # Model-level overrides, keyed `provider/model`.
         modelPrices:
+          deepseek-official/deepseek-flash:
+            inputPerM: 1
+            cacheReadPerM: 0.02
+            cacheWritePerM: 1
+            outputPerM: 4
+            peak:
+              inputPerM: 2
+              cacheReadPerM: 0.04
+              cacheWritePerM: 2
+              outputPerM: 8
+          deepseek-official/deepseek-v4-flash:
+            inputPerM: 1
+            cacheReadPerM: 0.02
+            cacheWritePerM: 1
+            outputPerM: 4
+            peak:
+              inputPerM: 2
+              cacheReadPerM: 0.04
+              cacheWritePerM: 2
+              outputPerM: 8
+          deepseek-official/deepseek-v4-flash-vision-exp:
+            inputPerM: 1
+            cacheReadPerM: 0.02
+            cacheWritePerM: 1
+            outputPerM: 4
+            peak:
+              inputPerM: 2
+              cacheReadPerM: 0.04
+              cacheWritePerM: 2
+              outputPerM: 8
           deepseek-official/deepseek-v4-pro:
             inputPerM: 4.5
             cacheReadPerM: 0.15
@@ -65,27 +98,17 @@
               cacheReadPerM: 0.3
               cacheWritePerM: 9
               outputPerM: 27
-          deepseek-official/deepseek-v4-flash-vision-exp:
-            inputPerM: 1.5
-            cacheReadPerM: 0.05
-            cacheWritePerM: 1.5
-            outputPerM: 4.5
-            peak:
-              inputPerM: 3
-              cacheReadPerM: 0.1
-              cacheWritePerM: 3
-              outputPerM: 9
         # Fallback for any provider/model without a matching entry above.
         defaultPrice:
-          inputPerM: 1.5
-          cacheReadPerM: 0.05
-          cacheWritePerM: 1.5
-          outputPerM: 4.5
+          inputPerM: 1
+          cacheReadPerM: 0.02
+          cacheWritePerM: 1
+          outputPerM: 4
           peak:
-            inputPerM: 3
-            cacheReadPerM: 0.1
-            cacheWritePerM: 3
-            outputPerM: 9
+            inputPerM: 2
+            cacheReadPerM: 0.04
+            cacheWritePerM: 2
+            outputPerM: 8
         # Official pricing pages shown as links in the cost section.
         priceUrls:
           deepseek-official: https://api-docs.deepseek.com/zh-cn/quick_start/pricing/

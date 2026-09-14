@@ -355,10 +355,10 @@ describe('contextUsage fold', () => {
     state = definition.apply(state, header('deepseek-official', 'deepseek-v4-flash') as SessionEvent)
     state = definition.apply(state, messageUsage(1, 1, 1_000_000, 1_000_000, { cacheRead: 1_000_000, cacheWrite: 1_000_000 }) as SessionEvent)
     const value = definition.wire.view(state as ContextUsageState)
-    // DEFAULT_PRICE off-peak base: miss 1.5, hit 0.05, write 1.5, output 4.5
+    // DEFAULT_PRICE off-peak base (2026-09 rates): miss 1, hit 0.02, write 1, output 4
     expect(value.currency).toBe('CNY')
     expect(value.peakHours).toBeUndefined()
-    expect(value.providers[0]?.cost).toBeCloseTo(1.5 + 4.5 + 0.05 + 1.5, 10)
+    expect(value.providers[0]?.cost).toBeCloseTo(1 + 4 + 0.02 + 1, 10)
   })
 
   it('is deterministic under replay', () => {

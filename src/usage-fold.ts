@@ -30,7 +30,7 @@
  */
 
 import { z } from 'zod'
-import { expandAssistantStream } from '@deepseek-ai/dsh-llm'
+import { lastAssistantStreamChunk } from '@deepseek-ai/dsh-llm'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 // Type-only: pulls the llm/retry-started key into the host SessionEventMap.
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
@@ -108,20 +108,21 @@ export interface PricingSpec {
 }
 
 /**
- * Default DeepSeek official pricing (deepseek-v4-flash tier, CNY — the
- * peak / off-peak scheme effective 2026-08-17; off-peak = half of peak).
+ * Default DeepSeek official pricing (deepseek-flash / V4.1-Flash tier, CNY —
+ * the peak / off-peak scheme in force since 2026-09; off-peak = half of peak).
  * Base fields are the OFF-PEAK rate; `peak` overrides the peak-hour rate.
+ * Cache writes bill at the cache-miss rate.
  */
 export const DEFAULT_PRICE: TokenPrice = Object.freeze({
-  inputPerM: 1.5,
-  cacheReadPerM: 0.05,
-  cacheWritePerM: 1.5,
-  outputPerM: 4.5,
+  inputPerM: 1,
+  cacheReadPerM: 0.02,
+  cacheWritePerM: 1,
+  outputPerM: 4,
   peak: Object.freeze({
-    inputPerM: 3,
-    cacheReadPerM: 0.1,
-    cacheWritePerM: 3,
-    outputPerM: 9,
+    inputPerM: 2,
+    cacheReadPerM: 0.04,
+    cacheWritePerM: 2,
+    outputPerM: 8,
   }),
 })
 
@@ -387,15 +388,9 @@ const contextUsageSchema = z.object({
 function usageOf(event: SessionEvent): TokenUsage | undefined {
   if (event.type === 'assistant/message' && event.data.usage !== undefined) return event.data.usage
   if (event.type !== 'assistant/message' && event.type !== 'assistant/attempt') return undefined
-  // Scan the compact stream backwards for its last usage chunk (ES2022-safe:
-  // no Array.prototype.toReversed in the host program's lib).
-  const members = expandAssistantStream(event.data.stream)
-  for (let index = members.length - 1; index >= 0; index -= 1) {
-    const member = members[index]
-    if (member === undefined) continue
-    if (member.chunk.type === 'usage') return member.chunk.usage
-  }
-  return undefined
+  // The settlement's own usage wins; otherwise the last usage chunk embedded
+  // in its compact stream (same helper the token-meter unit uses).
+  return lastAssistantStreamChunk(event.data.stream, 'usage')?.usage
 }
 
 /** Place one sample into a tiered bucket set, replacing a same-step sample in its original tier. */
